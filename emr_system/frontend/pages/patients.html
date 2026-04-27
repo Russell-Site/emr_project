@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Profile — District 1 Health EMR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary:      #0c2d4e;
+            --primary-mid:  #1a6fad;
+            --primary-light:#2288d4;
+            --primary-pale: #e8f4fb;
+            --accent:       #1a8a5e;
+            --accent-pale:  #e8f8f0;
+            --danger:       #c0392b;
+            --danger-pale:  #fef2f2;
+            --warning:      #b7791f;
+            --warning-pale: #fffbeb;
+            --bg:           #f4f7fa;
+            --card:         #ffffff;
+            --border:       #dce8f0;
+            --text:         #0c2d4e;
+            --text-muted:   #6b8699;
+            --sidebar:      #0a1628;
+            --sidebar-w:    250px;
+            --font-serif:   'Instrument Serif', Georgia, serif;
+            --font-sans:    'DM Sans', sans-serif;
+            --radius:       10px;
+            --shadow:       0 2px 12px rgba(12,45,78,0.08);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-sans); background: var(--bg); color: var(--text); font-size: 14px; }
+
+        /* ---- Sidebar (same as dashboard) ---- */
+        .sidebar {
+            position: fixed; left: 0; top: 0; bottom: 0;
+            width: var(--sidebar-w);
+            background: var(--sidebar);
+            display: flex; flex-direction: column;
+            z-index: 100;
+        }
+        .sidebar-brand {
+            padding: 20px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .brand-icon {
+            width: 36px; height: 36px; min-width: 36px;
+            background: linear-gradient(135deg, var(--primary-mid), var(--accent));
+            border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 16px;
+        }
+        .brand-text { color: #fff; font-size: 13px; font-weight: 600; line-height: 1.3; }
+        .brand-text span { display: block; font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.4); }
+
+        .sidebar-user {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .user-av {
+            width: 34px; height: 34px;
+            background: linear-gradient(135deg, var(--primary-mid), var(--accent));
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 13px; min-width: 34px;
+        }
+        .user-name { color: #fff; font-size: 12.5px; font-weight: 600; }
+        .user-role { color: rgba(255,255,255,0.4); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        nav { flex: 1; overflow-y: auto; padding: 10px 0; }
+        .nav-section-label {
+            padding: 8px 18px 3px;
+            font-size: 9.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.9px;
+            color: rgba(255,255,255,0.28);
+        }
+        .nav-link {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 18px;
+            color: rgba(255,255,255,0.55);
+            font-size: 13px; font-weight: 500;
+            cursor: pointer; text-decoration: none;
+            border-left: 3px solid transparent;
+            transition: all 0.15s;
+        }
+        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .nav-link.active { color: #fff; background: rgba(26,138,94,0.18); border-left-color: #22b87d; }
+        .nav-icon { font-size: 15px; min-width: 18px; text-align: center; }
+        .admin-only { display: none; }
+
+        .sidebar-foot {
+            padding: 12px 18px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+        }
+        .btn-logout {
+            background: none; border: none;
+            color: rgba(255,255,255,0.4);
+            font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 0; width: 100%;
+            transition: color 0.15s;
+        }
+        .btn-logout:hover { color: var(--danger); }
+
+        /* ---- Main ---- */
+        .main {
+            margin-left: var(--sidebar-w);
+            display: flex; flex-direction: column; min-height: 100vh;
+        }
+        .topbar {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            height: 58px; padding: 0 26px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+            box-shadow: 0 1px 4px rgba(12,45,78,0.06);
+        }
+        .topbar-title { font-size: 17px; font-weight: 700; color: var(--text); }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
+        .datetime { font-size: 12px; color: var(--text-muted); }
+        .topbar-btn {
+            background: none; border: none; cursor: pointer;
+            color: var(--text-muted); font-size: 13px; padding: 6px 10px;
+            border-radius: 7px; transition: all 0.15s;
+        }
+        .topbar-btn:hover { background: var(--bg); color: var(--primary); }
+
+        .content { padding: 24px 26px; }
+
+        /* ---- Patient Search ---- */
+        .search-section { margin-bottom: 20px; }
+        .search-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .search-title { font-family: var(--font-serif); font-size: 20px; color: var(--text); }
+        .search-subtitle { font-size: 13px; color: var(--text-muted); }
+
+        .search-bar {
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 14px;
+            box-shadow: var(--shadow);
+        }
+        .search-input-wrap { position: relative; flex: 1; min-width: 220px; }
+        .search-input-wrap input {
+            width: 100%;
+            padding: 9px 13px 9px 13px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: var(--font-sans);
+            font-size: 13.5px; color: var(--text);
+            background: var(--bg); outline: none;
+            transition: all 0.18s;
+        }
+        .search-input-wrap input:focus {
+            border-color: var(--primary-light);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(34,136,212,0.1);
+        }
+        .filter-sel {
+            padding: 9px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px; background: var(--bg); cursor: pointer;
+            outline: none; min-width: 130px; color: var(--text);
+        }
+        .filter-sel:focus { border-color: var(--primary-light); }
+        .btn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 16px; border-radius: 8px; font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; text-decoration: none; transition: all 0.15s; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-mid); }
+        .btn-outline { background: transparent; border-color: var(--border); color: var(--text-muted); }
+        .btn-outline:hover { border-color: var(--primary-light); color: var(--primary); background: var(--primary-pale); }
+        .btn-sm { padding: 5px 11px; font-size: 12px; }
+        .btn-success { background: var(--accent); color: #fff; }
+        .btn-success:hover { opacity: 0.88; }
+
+        /* ---- Results Table ---- */
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        thead th {
+            background: var(--bg);
+            color: var(--text-muted);
+            font-size: 10.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            padding: 9px 14px; text-align: left;
+            border-bottom: 2px solid var(--border);
+        }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--primary-pale); cursor: pointer; }
+        tbody td { padding: 10px 14px; }
+
+        .badge {
+            display: inline-flex; align-items: center;
+            padding: 2px 9px; border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+        }
+        .badge-male   { background: var(--primary-pale); color: var(--primary); }
+        .badge-female { background: #f5edfb; color: #8e44ad; }
+
+        .empty-state { text-align: center; padding: 44px 20px; color: var(--text-muted); }
+        .empty-state p { font-size: 13px; margin-top: 6px; }
+
+        /* ---- Patient Profile ---- */
+        #patientProfile { display: none; }
+
+        .profile-nav {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 18px;
+        }
+        .back-btn {
+            background: none; border: none;
+            font-size: 13px; color: var(--text-muted);
+            cursor: pointer; padding: 6px 0;
+            display: flex; align-items: center; gap: 6px;
+            font-family: var(--font-sans);
+            transition: color 0.15s;
+        }
+        .back-btn:hover { color: var(--primary); }
+        .breadcrumb-sep { color: var(--border); font-size: 16px; }
+        .breadcrumb-current { font-size: 13px; color: var(--text-muted); }
+
+        /* Profile header card */
+        .profile-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-mid) 100%);
+            border-radius: var(--radius);
+            padding: 24px 26px;
+            color: #fff;
+            margin-bottom: 16px;
+            display: flex; align-items: center; gap: 20px;
+        }
+        .profile-avatar {
+            width: 64px; height: 64px; min-width: 64px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: var(--font-serif);
+            font-size: 26px; color: #fff;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+        .profile-info { flex: 1; }
+        .profile-name {
+            font-family: var(--font-serif);
+            font-size: 22px; margin-bottom: 4px;
+        }
+        .profile-meta { font-size: 13px; color: rgba(255,255,255,0.75); }
+        .profile-meta span { margin-right: 16px; }
+        .profile-actions { display: flex; gap: 8px; }
+        .btn-white {
+            background: rgba(255,255,255,0.15);
+            border: 1.5px solid rgba(255,255,255,0.3);
+            color: #fff; padding: 8px 16px;
+            border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; font-family: var(--font-sans);
+            transition: background 0.15s;
+        }
+        .btn-white:hover { background: rgba(255,255,255,0.25); }
+
+        /* Info cards row */
+        .info-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
+        .info-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px;
+            box-shadow: var(--shadow);
+        }
+        .info-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 5px; }
+        .info-value { font-size: 15px; font-weight: 600; color: var(--text); }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 18px; }
+        .tab-btn {
+            background: none; border: none;
+            padding: 10px 20px;
+            font-size: 13.5px; font-weight: 600;
+            color: var(--text-muted); cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.15s;
+            font-family: var(--font-sans);
+        }
+        .tab-btn:hover { color: var(--primary); }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* Add record form */
+        .form-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px 22px;
+            margin-bottom: 16px; box-shadow: var(--shadow);
+        }
+        .form-card-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .form-row.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .field input, .field select, .field textarea {
+            width: 100%; padding: 9px 12px;
+            border: 1.5px solid var(--border); border-radius: 8px;
+            font-family: var(--font-sans); font-size: 13.5px; color: var(--text);
+            background: var(--bg); outline: none; transition: all 0.15s;
+        }
+        .field input:focus, .field select:focus, .field textarea:focus {
+            border-color: var(--primary-light);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(34,136,212,0.08);
+        }
+        .field textarea { resize: vertical; min-height: 72px; }
+        .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+        /* Timeline / history */
+        .timeline { display: flex; flex-direction: column; gap: 12px; }
+        .timeline-item {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px 18px;
+            box-shadow: var(--shadow);
+            transition: border-color 0.15s;
+        }
+        .timeline-item:hover { border-color: var(--primary-light); }
+        .timeline-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+        .timeline-date { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+        .timeline-badge { font-size: 11px; background: var(--primary-pale); color: var(--primary); padding: 2px 9px; border-radius: 20px; font-weight: 600; }
+        .timeline-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+        .timeline-field { font-size: 13px; }
+        .timeline-field .lbl { color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .timeline-field .val { color: var(--text); margin-top: 2px; }
+        .vitals-row { display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 12px; background: var(--bg); border-radius: 7px; margin-top: 8px; }
+        .vital { font-size: 12px; color: var(--text-muted); }
+        .vital strong { color: var(--text); display: block; font-size: 13px; }
+
+        /* Immunization list */
+        .immun-list { display: flex; flex-direction: column; gap: 10px; }
+        .immun-item {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            box-shadow: var(--shadow);
+        }
+        .immun-left { flex: 1; }
+        .immun-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+        .immun-meta { font-size: 12px; color: var(--text-muted); }
+        .immun-right { text-align: right; }
+        .immun-date { font-size: 12px; color: var(--text-muted); }
+        .immun-next { font-size: 11px; color: var(--accent); margin-top: 2px; font-weight: 600; }
+
+        /* Toast */
+        #toastContainer {
+            position: fixed; top: 18px; right: 18px;
+            z-index: 9000; display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            background: var(--card); border-radius: 9px;
+            padding: 12px 16px; min-width: 260px;
+            display: flex; align-items: center; gap: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.14);
+            border-left: 4px solid;
+            font-size: 13.5px;
+            animation: toastIn 0.25s ease;
+        }
+        @keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:none; } }
+        .toast.success { border-color: var(--accent); }
+        .toast.error   { border-color: var(--danger); }
+        .toast.info    { border-color: var(--primary-light); }
+        .toast.warning { border-color: #f39c12; }
+
+        /* Session lock */
+        #sessionLock {
+            display: none; position: fixed; inset: 0;
+            background: rgba(12,45,78,0.88); backdrop-filter: blur(6px);
+            z-index: 9999; align-items: center; justify-content: center;
+        }
+        #sessionLock.show { display: flex; }
+        .lock-card {
+            background: #fff; border-radius: 14px;
+            padding: 38px 34px; text-align: center; width: 330px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        .lock-card h2 { font-family: var(--font-serif); font-size: 21px; margin-bottom: 6px; }
+        .lock-card p  { color: var(--text-muted); font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
+        .lock-card input {
+            width: 100%; padding: 10px 13px;
+            border: 1.5px solid var(--border); border-radius: 8px;
+            font-size: 14px; margin-bottom: 10px; outline: none;
+        }
+        .lock-card input:focus { border-color: var(--primary-light); }
+        #unlockError { color: var(--danger); font-size: 12px; margin-bottom: 10px; display: none; }
+        .btn-unlock {
+            width: 100%; padding: 11px;
+            background: var(--primary); color: #fff;
+            border: none; border-radius: 8px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            font-family: var(--font-sans);
+        }
+        .btn-unlock:hover { background: var(--primary-mid); }
+
+        @media (max-width: 900px) {
+            .info-row { grid-template-columns: 1fr 1fr; }
+            .form-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+    <div class="sidebar-brand">
+        <div class="brand-icon">H</div>
+        <div class="brand-text">District 1 EMR <span>Health Management System</span></div>
+    </div>
+    <div class="sidebar-user">
+        <div class="user-av" id="sidebarAvatar">A</div>
+        <div>
+            <div class="user-name" id="sidebarName">Loading...</div>
+            <div class="user-role" id="sidebarRole">—</div>
+        </div>
+    </div>
+    <nav>
+    <div class="nav-section-label">Main Menu</div>
+    <a class="nav-link" href="/frontend/pages/dashboard.html?section=dashboard">
+        <span class="nav-icon">▣</span> Dashboard
+    </a>
+    <a class="nav-link active" href="#">
+        <span class="nav-icon">▤</span> Patients
+    </a>
+    <a class="nav-link" href="/frontend/pages/dashboard.html?section=disease-cases">
+        <span class="nav-icon">◎</span> Surveillance
+    </a>
+    <div class="nav-section-label">Analytics</div>
+    <a class="nav-link" href="/frontend/pages/dashboard.html?section=analytics">
+        <span class="nav-icon">◫</span> Disease Trends
+    </a>
+    <div class="nav-section-label admin-only">Administration</div>
+    <a class="nav-link admin-only" href="/frontend/pages/dashboard.html?section=bhw-management">
+        <span class="nav-icon">◻</span> BHW Management
+    </a>
+    <a class="nav-link admin-only" href="/frontend/pages/dashboard.html?section=reports">
+        <span class="nav-icon">◪</span> Reports
+    </a>
+    <a class="nav-link admin-only" href="/frontend/pages/dashboard.html?section=audit-logs">
+        <span class="nav-icon">◩</span> Audit Logs
+    </a>
+</nav>
+    <div class="sidebar-foot">
+        <button class="btn-logout" onclick="handleLogout()">Sign Out</button>
+    </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+    <header class="topbar">
+        <div class="topbar-title" id="topbarTitle">Patients</div>
+        <div class="topbar-right">
+            <span class="datetime" id="datetimeDisplay"></span>
+        </div>
+    </header>
+
+    <div class="content">
+
+        <!-- ===== PATIENT SEARCH VIEW ===== -->
+        <div id="patientSearch">
+            <div class="search-header">
+                <div>
+                    <div class="search-title">Patient Records</div>
+                    <div class="search-subtitle">Search and manage patient health profiles</div>
+                </div>
+                <button class="btn btn-primary" onclick="openAddPatientForm()">Add Patient</button>
+            </div>
+
+            <div class="search-bar">
+                <div class="search-input-wrap">
+                    <input type="text" id="searchInput"
+                        placeholder="Search by name or contact number..."
+                        oninput="debounceSearch()">
+                </div>
+                <select class="filter-sel" id="filterBarangay" onchange="runSearch()">
+                    <option value="">All Barangays</option>
+                </select>
+                <select class="filter-sel" id="filterSex" onchange="runSearch()">
+                    <option value="">All</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="clearSearch()">Clear</button>
+            </div>
+
+            <div class="card" style="margin-top:0;">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Age / Sex</th>
+                                <th>Barangay</th>
+                                <th>Contact</th>
+                                <th>PhilHealth</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientTableBody">
+                            <tr><td colspan="7"><div class="empty-state"><p>Loading patients...</p></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Add Patient Form (inline, collapsible) -->
+            <div class="form-card" id="addPatientForm" style="display:none; margin-top:16px;">
+                <div class="form-card-title">Register New Patient</div>
+                <div class="form-row">
+                    <div class="field"><label>Last Name *</label><input type="text" id="ptLast" required></div>
+                    <div class="field"><label>First Name *</label><input type="text" id="ptFirst" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="field"><label>Middle Name</label><input type="text" id="ptMiddle"></div>
+                    <div class="field"><label>Birthdate *</label><input type="date" id="ptBirth" required></div>
+                </div>
+                <div class="form-row">
+                    <div class="field"><label>Sex *</label>
+                        <select id="ptSex"><option value="">-- Select --</option><option>Male</option><option>Female</option></select>
+                    </div>
+                    <div class="field"><label>Civil Status</label>
+                        <select id="ptCivil"><option value="">-- Select --</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="field"><label>Barangay *</label>
+                        <select id="ptBarangay"><option value="">-- Select Barangay --</option></select>
+                    </div>
+                    <div class="field"><label>Contact Number</label><input type="text" id="ptContact" placeholder="09XXXXXXXXX"></div>
+                </div>
+                <div class="field"><label>Address *</label><textarea id="ptAddress" required></textarea></div>
+                <div class="field"><label>PhilHealth No.</label><input type="text" id="ptPhilhealth"></div>
+                <div class="form-actions">
+                    <button class="btn btn-outline" onclick="document.getElementById('addPatientForm').style.display='none'">Cancel</button>
+                    <button class="btn btn-primary" onclick="submitNewPatient()">Save Patient</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PATIENT PROFILE VIEW ===== -->
+        <div id="patientProfile">
+            <div class="profile-nav">
+                <button class="back-btn" onclick="backToSearch()">← Back</button>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current" id="profileBreadcrumb">Patient Profile</span>
+            </div>
+
+            <!-- Profile Header -->
+            <div class="profile-header">
+                <div class="profile-avatar" id="profileAvatar">—</div>
+                <div class="profile-info">
+                    <div class="profile-name" id="profileName">—</div>
+                    <div class="profile-meta" id="profileMeta">—</div>
+                </div>
+                <div class="profile-actions">
+                    <button class="btn-white" onclick="editCurrentPatient()">Edit Profile</button>
+                </div>
+            </div>
+
+            <!-- Quick Info -->
+            <div class="info-row">
+                <div class="info-card"><div class="info-label">Barangay</div><div class="info-value" id="infoBarangay">—</div></div>
+                <div class="info-card"><div class="info-label">PhilHealth</div><div class="info-value" id="infoPhilhealth">—</div></div>
+                <div class="info-card"><div class="info-label">Contact</div><div class="info-value" id="infoContact">—</div></div>
+                <div class="info-card"><div class="info-label">Civil Status</div><div class="info-value" id="infoCivil">—</div></div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('records')">Medical History</button>
+                <button class="tab-btn" onclick="switchTab('add-record')">Add Medical Record</button>
+                <button class="tab-btn" onclick="switchTab('immunizations')">Immunizations</button>
+                <button class="tab-btn" onclick="switchTab('add-immun')">Add Immunization</button>
+            </div>
+
+            <!-- Tab: Medical History -->
+            <div class="tab-pane active" id="tab-records">
+                <div class="timeline" id="recordsTimeline">
+                    <div class="empty-state"><p>No medical records yet.</p></div>
+                </div>
+            </div>
+
+            <!-- Tab: Add Medical Record -->
+            <div class="tab-pane" id="tab-add-record">
+                <div class="form-card">
+                    <div class="form-card-title">New Medical Record</div>
+                    <div class="form-row">
+                        <div class="field"><label>Visit Date *</label><input type="date" id="recDate"></div>
+                        <div class="field"><label>Chief Complaint</label><input type="text" id="recComplaint" placeholder="Main reason for visit"></div>
+                    </div>
+                    <div class="field"><label>Symptoms</label><textarea id="recSymptoms" placeholder="Describe symptoms in detail..."></textarea></div>
+                    <div class="field"><label>Diagnosis</label><textarea id="recDiagnosis"></textarea></div>
+                    <div class="field"><label>Treatment / Prescription</label><textarea id="recTreatment"></textarea></div>
+                    <div class="form-row cols-4">
+                        <div class="field"><label>Blood Pressure</label><input type="text" id="recBP" placeholder="120/80"></div>
+                        <div class="field"><label>Temp (°C)</label><input type="number" id="recTemp" step="0.1" min="30" max="45" placeholder="36.5"></div>
+                        <div class="field"><label>Weight (kg)</label><input type="number" id="recWeight" step="0.1" placeholder="60.0"></div>
+                        <div class="field"><label>Height (cm)</label><input type="number" id="recHeight" step="0.1" placeholder="160"></div>
+                    </div>
+                    <div class="field"><label>Notes</label><textarea id="recNotes"></textarea></div>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" onclick="switchTab('records')">Cancel</button>
+                        <button class="btn btn-primary" onclick="submitRecord()">Save Record</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Immunizations -->
+            <div class="tab-pane" id="tab-immunizations">
+                <div class="immun-list" id="immunList">
+                    <div class="empty-state"><p>No immunization records yet.</p></div>
+                </div>
+            </div>
+
+            <!-- Tab: Add Immunization -->
+            <div class="tab-pane" id="tab-add-immun">
+                <div class="form-card">
+                    <div class="form-card-title">New Immunization Record</div>
+                    <div class="form-row">
+                        <div class="field"><label>Vaccine Name *</label><input type="text" id="immVaccine" placeholder="e.g. BCG, Hepatitis B, MMR"></div>
+                        <div class="field"><label>Date Given *</label><input type="date" id="immDate"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field"><label>Dose Number</label><input type="number" id="immDose" min="1" max="10" value="1"></div>
+                        <div class="field"><label>Next Schedule</label><input type="date" id="immNext"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field"><label>Administered By</label><input type="text" id="immAdminBy"></div>
+                        <div class="field"><label>Batch Number</label><input type="text" id="immBatch"></div>
+                    </div>
+                    <div class="field"><label>Remarks</label><textarea id="immRemarks"></textarea></div>
+                    <div class="form-actions">
+                        <button class="btn btn-outline" onclick="switchTab('immunizations')">Cancel</button>
+                        <button class="btn btn-success" onclick="submitImmunization()">Save Immunization</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /content -->
+</main>
+
+<div id="toastContainer"></div>
+
+<div id="sessionLock">
+    <div class="lock-card">
+        <h2>Session Locked</h2>
+        <p>Your session was locked due to inactivity.<br>Re-enter your password to continue.</p>
+        <input type="password" id="unlockPassword" placeholder="Password"
+            onkeydown="if(event.key==='Enter') unlockSession()">
+        <div id="unlockError">Incorrect password.</div>
+        <button class="btn-unlock" onclick="unlockSession()">Unlock Session</button>
+    </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script src="../js/session.js"></script>
+<script>
+/* ============================================================
+   patients.js inline — Patient search, profile, records, immunizations
+   ============================================================ */
+
+if (!requireAuth()) { /* api.js handles redirect */ }
+
+const user = getCurrentUser();
+document.getElementById('sidebarName').textContent   = user.name || '—';
+document.getElementById('sidebarRole').textContent   = user.role === 'admin' ? 'Administrator' : 'Barangay Health Worker';
+document.getElementById('sidebarAvatar').textContent = (user.name || 'U').charAt(0).toUpperCase();
+
+if (isAdmin()) {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+}
+
+// Datetime
+function updateClock() {
+    document.getElementById('datetimeDisplay').textContent =
+        new Date().toLocaleString('en-PH', { weekday:'short', month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+updateClock(); setInterval(updateClock, 60000);
+
+let currentPatientId        = null;
+let currentPatientBarangayId = null;
+let searchDebounce          = null;
+
+/* ============================================================
+   DIAGNOSIS → DISEASE MAPPING
+   Base ang case counting sa DIAGNOSIS field lamang (hindi symptoms).
+   Normalize ang severity variants (mild/severe/acute/chronic)
+   para ma-group sa iisang disease category.
+   e.g. "mild influenza", "severe flu", "gripe" → Influenza
+   ============================================================ */
+const DISEASE_PATTERNS = [
+    // Influenza — kasama ang lahat ng severity at local terms
+    { pattern: /(\b|mild |severe |acute |chronic )(flu|influenza|gripe)(\b| )/i,                       name: 'Influenza' },
+    // Dengue — kasama ang DHF at dengue shock
+    { pattern: /(dengue|dhf|dengue hemorrhagic fever|dengue shock syndrome)/i,                           name: 'Dengue Fever' },
+    // Tuberculosis
+    { pattern: /(\b|pulmonary |miliary |extra-?pulmonary )(tb|tuberculosis)(\b| )/i,                    name: 'Tuberculosis' },
+    // COVID-19
+    { pattern: /(covid-?19|coronavirus|sars-cov-2|covid)/i,                                              name: 'COVID-19' },
+    // Hypertension
+    { pattern: /(hypertension|htn|high blood pressure|hbp|elevated bp)/i,                               name: 'Hypertension' },
+    // Diabetes
+    { pattern: /(diabetes mellitus|diabetic|dm type [12]|type [12] dm|dm2|dm1|t2dm|t1dm)/i,              name: 'Diabetes Mellitus' },
+    // Pneumonia
+    { pattern: /(\b|community-acquired |hospital-acquired |aspiration )(pneumonia|pneumonitis)(\b| )/i, name: 'Pneumonia' },
+    // Diarrhea
+    { pattern: /(diarrhea|diarrhoea|gastroenteritis|loose bowel movement|lbm)/i,                        name: 'Diarrhea' },
+    // Leptospirosis
+    { pattern: /(leptospirosis|leptospira|weil.s disease)/i,                                             name: 'Leptospirosis' },
+    // Typhoid
+    { pattern: /(typhoid fever|typhoid|enteric fever|salmonella typhi)/i,                                name: 'Typhoid Fever' },
+    // ARI — broad respiratory catch-all
+    { pattern: /(acute respiratory infection|ari|urti|uri|upper respiratory tract infection|nasopharyngitis)/i, name: 'Acute Respiratory Infection' },
+    // Chickenpox
+    { pattern: /(chickenpox|chicken pox|varicella)/i,                                                    name: 'Chickenpox' },
+    // Measles
+    { pattern: /(measles|tigdas|rubeola)/i,                                                              name: 'Measles' },
+    // Asthma
+    { pattern: /(\b|bronchial |allergic )(asthma|asthmatic)(\b| )/i,                                   name: 'Asthma' },
+    // Malnutrition
+    { pattern: /(malnutrition|malnourished|protein.energy malnutrition|pem|wasting|stunting)/i,          name: 'Malnutrition' },
+];
+
+/**
+ * Suriin ang DIAGNOSIS text para ma-detect ang standardized na sakit.
+ * Tanging diagnosis field lang ang ginagamit — hindi symptoms.
+ * Returns array ng detected disease names (unique).
+ * e.g. "Mild Influenza", "Severe Flu", "Gripe" → lahat = "Influenza"
+ */
+function detectDiseasesFromText(text) {
+    if (!text) return [];
+    const found = new Set();
+    DISEASE_PATTERNS.forEach(({ pattern, name }) => {
+        if (pattern.test(text)) found.add(name);
+    });
+    return [...found];
+}
+
+/**
+ * Awtomatikong mag-record ng disease cases base sa DIAGNOSIS field lamang.
+ * Hindi na ginagamit ang symptoms para mas tumpak ang case counting.
+ * Tinatawag pagkatapos ma-save ang medical record.
+ */
+async function autoRecordDiseaseCases(patientId, barangayId, visitDate, diagnosis) {
+    // Diagnosis lang — hindi symptoms
+    const detectedDiseases = detectDiseasesFromText(diagnosis || '');
+
+    if (detectedDiseases.length === 0) return;
+
+    // Kunin ang disease master list para makuha ang IDs
+    const diseases = await apiGet('/api/disease-cases/diseases');
+    if (!diseases) return;
+
+    const diseaseMap = {};
+    diseases.forEach(d => { diseaseMap[d.disease_name] = d.disease_id; });
+
+    for (const diseaseName of detectedDiseases) {
+        const diseaseId = diseaseMap[diseaseName];
+        if (!diseaseId) continue;
+
+        try {
+            await apiPost('/api/disease-cases/', {
+                disease_id:      diseaseId,
+                barangay_id:     parseInt(barangayId),
+                patient_id:      parseInt(patientId),
+                date_recorded:   visitDate,
+                number_of_cases: 1,
+                remarks:         `Auto-recorded from diagnosis: ${diagnosis}`
+            });
+        } catch (e) {
+            // Hindi mag-block ng save kahit may error sa auto-recording
+            console.warn(`Could not auto-record case for ${diseaseName}:`, e);
+        }
+    }
+
+    if (detectedDiseases.length > 0) {
+        showToast(`Auto-recorded case(s): ${detectedDiseases.join(', ')}`, 'info', 5000);
+    }
+}
+
+/* ============================================================
+   PATIENT SEARCH
+   ============================================================ */
+
+async function runSearch() {
+    const q        = document.getElementById('searchInput').value.trim();
+    const barangay = document.getElementById('filterBarangay').value;
+    const sex      = document.getElementById('filterSex').value;
+
+    let url = '/api/patients/?limit=80';
+    if (q)        url += `&search=${encodeURIComponent(q)}`;
+    if (barangay) url += `&barangay_id=${barangay}`;
+    if (sex)      url += `&sex=${encodeURIComponent(sex)}`;
+
+    try {
+        const patients = await apiGet(url);
+        renderPatientTable(patients || []);
+    } catch (e) {
+        showToast('Error loading patients.', 'error');
+    }
+}
+
+function debounceSearch() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(runSearch, 380);
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value   = '';
+    document.getElementById('filterBarangay').value = '';
+    document.getElementById('filterSex').value      = '';
+    runSearch();
+}
+
+function renderPatientTable(patients) {
+    const tbody = document.getElementById('patientTableBody');
+    if (!patients.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><p>No patients found.</p></div></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = patients.map((p, i) => `
+        <tr onclick="openPatientProfile(${p.patient_id})">
+            <td style="color:var(--text-muted);font-size:12px;">${i+1}</td>
+            <td><strong>${escapeHtml(p.last_name)}, ${escapeHtml(p.first_name)}</strong>
+                ${p.middle_name ? `<span style="font-size:11px;color:var(--text-muted);"> ${escapeHtml(p.middle_name)}</span>` : ''}
+            </td>
+            <td>${p.age || calcAge(p.birthdate)} yrs &nbsp;
+                <span class="badge badge-${p.sex === 'Male' ? 'male' : 'female'}">${p.sex}</span>
+            </td>
+            <td style="font-size:13px;">${escapeHtml(p.barangay_name || '—')}</td>
+            <td style="font-size:13px;">${escapeHtml(p.contact_number || '—')}</td>
+            <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(p.philhealth_no || '—')}</td>
+            <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openPatientProfile(${p.patient_id})">View Profile</button></td>
+        </tr>
+    `).join('');
+}
+
+function calcAge(birthdate) {
+    const b = new Date(birthdate), t = new Date();
+    let a = t.getFullYear() - b.getFullYear();
+    if ((t.getMonth() * 100 + t.getDate()) < (b.getMonth() * 100 + b.getDate())) a--;
+    return a;
+}
+
+/* ============================================================
+   PATIENT PROFILE
+   ============================================================ */
+
+async function openPatientProfile(patientId) {
+    try {
+        const p = await apiGet(`/api/patients/${patientId}`);
+        if (!p) return;
+
+        currentPatientId        = patientId;
+        currentPatientBarangayId = p.barangay_id;
+        document.getElementById('topbarTitle').textContent = 'Patient Profile';
+
+        // Header
+        const initials = `${p.first_name.charAt(0)}${p.last_name.charAt(0)}`.toUpperCase();
+        document.getElementById('profileAvatar').textContent  = initials;
+        document.getElementById('profileName').textContent    = `${p.last_name}, ${p.first_name} ${p.middle_name || ''}`.trim();
+        document.getElementById('profileBreadcrumb').textContent = `${p.last_name}, ${p.first_name}`;
+
+        const age = p.age || calcAge(p.birthdate);
+        document.getElementById('profileMeta').innerHTML =
+            `<span>${p.sex}</span><span>${age} years old</span><span>Born ${formatDate(p.birthdate)}</span>`;
+
+        // Info cards
+        document.getElementById('infoBarangay').textContent   = p.barangay_name || '—';
+        document.getElementById('infoPhilhealth').textContent = p.philhealth_no  || '—';
+        document.getElementById('infoContact').textContent    = p.contact_number || '—';
+        document.getElementById('infoCivil').textContent      = p.civil_status   || '—';
+
+        // Show profile, hide search
+        document.getElementById('patientSearch').style.display  = 'none';
+        document.getElementById('patientProfile').style.display = 'block';
+
+        // Set today as default visit date
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('recDate').value  = today;
+        document.getElementById('immDate').value  = today;
+
+        // Load tabs
+        switchTab('records');
+        await loadMedicalHistory(patientId);
+        await loadImmunizations(patientId);
+
+    } catch (e) {
+        showToast('Error loading patient profile.', 'error');
+    }
+}
+
+function backToSearch() {
+    document.getElementById('patientProfile').style.display = 'none';
+    document.getElementById('patientSearch').style.display  = 'block';
+    document.getElementById('topbarTitle').textContent      = 'Patients';
+    currentPatientId = null;
+}
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        const names = ['records','add-record','immunizations','add-immun'];
+        btn.classList.toggle('active', names[i] === tabName);
+    });
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.toggle('active', pane.id === `tab-${tabName}`);
+    });
+}
+
+/* ============================================================
+   MEDICAL HISTORY
+   ============================================================ */
+
+async function loadMedicalHistory(patientId) {
+    try {
+        const records = await apiGet(`/api/medical-records/patient/${patientId}`);
+        const container = document.getElementById('recordsTimeline');
+
+        if (!records || !records.length) {
+            container.innerHTML = `<div class="empty-state"><p>No medical records found for this patient.</p></div>`;
+            return;
+        }
+
+        container.innerHTML = records.map(r => `
+            <div class="timeline-item">
+                <div class="timeline-header">
+                    <div>
+                        <div style="font-weight:700;font-size:14px;color:var(--text);">${escapeHtml(r.chief_complaint || r.diagnosis || 'Visit')}</div>
+                        <div class="timeline-date">${formatDate(r.visit_date)}</div>
+                    </div>
+                    <span class="timeline-badge">Visit</span>
+                </div>
+                <div class="timeline-row">
+                    ${r.symptoms  ? `<div class="timeline-field"><div class="lbl">Symptoms</div><div class="val">${escapeHtml(r.symptoms)}</div></div>` : ''}
+                    ${r.diagnosis ? `<div class="timeline-field"><div class="lbl">Diagnosis</div><div class="val">${escapeHtml(r.diagnosis)}</div></div>` : ''}
+                    ${r.treatment ? `<div class="timeline-field" style="grid-column:span 2"><div class="lbl">Treatment</div><div class="val">${escapeHtml(r.treatment)}</div></div>` : ''}
+                </div>
+                ${(r.blood_pressure || r.temperature || r.weight_kg || r.height_cm) ? `
+                <div class="vitals-row">
+                    ${r.blood_pressure ? `<div class="vital"><strong>${escapeHtml(r.blood_pressure)}</strong>BP</div>` : ''}
+                    ${r.temperature    ? `<div class="vital"><strong>${r.temperature}°C</strong>Temp</div>` : ''}
+                    ${r.weight_kg      ? `<div class="vital"><strong>${r.weight_kg} kg</strong>Weight</div>` : ''}
+                    ${r.height_cm      ? `<div class="vital"><strong>${r.height_cm} cm</strong>Height</div>` : ''}
+                </div>` : ''}
+                <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Encoded by ${escapeHtml(r.encoder || '—')}</div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('recordsTimeline').innerHTML =
+            `<div class="empty-state"><p>Error loading records.</p></div>`;
+    }
+}
+
+async function submitRecord() {
+    const date      = document.getElementById('recDate').value;
+    const complaint = document.getElementById('recComplaint').value.trim();
+    const symptoms  = document.getElementById('recSymptoms').value.trim();
+    const diagnosis = document.getElementById('recDiagnosis').value.trim();
+    const treatment = document.getElementById('recTreatment').value.trim();
+    const bp        = document.getElementById('recBP').value.trim();
+    const temp      = document.getElementById('recTemp').value;
+    const weight    = document.getElementById('recWeight').value;
+    const height    = document.getElementById('recHeight').value;
+    const notes     = document.getElementById('recNotes').value.trim();
+
+    if (!date) { showToast('Visit date is required.', 'warning'); return; }
+    if (!currentPatientId) return;
+
+    try {
+        const result = await apiPost('/api/medical-records/', {
+            patient_id:      currentPatientId,
+            visit_date:      date,
+            chief_complaint: complaint  || null,
+            symptoms:        symptoms   || null,
+            diagnosis:       diagnosis  || null,
+            treatment:       treatment  || null,
+            blood_pressure:  bp         || null,
+            temperature:     temp       ? parseFloat(temp)   : null,
+            weight_kg:       weight     ? parseFloat(weight) : null,
+            height_cm:       height     ? parseFloat(height) : null,
+            notes:           notes      || null
+        });
+
+        if (result) {
+            showToast('Medical record saved.', 'success');
+
+            // I-trigger ang auto case counting gamit ang diagnosis field
+            // at ang stored na barangay ID (hindi na kailangan ng extra API call)
+            if (diagnosis && currentPatientBarangayId) {
+                await autoRecordDiseaseCases(
+                    currentPatientId,
+                    currentPatientBarangayId,
+                    date,
+                    diagnosis
+                );
+            }
+
+            // Clear form fields
+            ['recComplaint','recSymptoms','recDiagnosis','recTreatment','recBP','recTemp','recWeight','recHeight','recNotes']
+                .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+            await loadMedicalHistory(currentPatientId);
+            switchTab('records');
+        }
+    } catch (e) {
+        showToast('Error saving record: ' + e.message, 'error');
+    }
+}
+
+/* ============================================================
+   IMMUNIZATIONS
+   ============================================================ */
+
+async function loadImmunizations(patientId) {
+    try {
+        const records = await apiGet(`/api/immunizations/patient/${patientId}`);
+        const container = document.getElementById('immunList');
+
+        if (!records || !records.length) {
+            container.innerHTML = `<div class="empty-state"><p>No immunization records found.</p></div>`;
+            return;
+        }
+
+        container.innerHTML = records.map(r => `
+            <div class="immun-item">
+                <div class="immun-left">
+                    <div class="immun-name">${escapeHtml(r.vaccine_name)}</div>
+                    <div class="immun-meta">
+                        Dose ${r.dose_number || 1}
+                        ${r.administered_by ? ` &middot; Given by ${escapeHtml(r.administered_by)}` : ''}
+                        ${r.batch_number    ? ` &middot; Batch: ${escapeHtml(r.batch_number)}` : ''}
+                    </div>
+                    ${r.remarks ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${escapeHtml(r.remarks)}</div>` : ''}
+                </div>
+                <div class="immun-right">
+                    <div class="immun-date">${formatDate(r.date_given)}</div>
+                    ${r.next_schedule ? `<div class="immun-next">Next: ${formatDate(r.next_schedule)}</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('immunList').innerHTML =
+            `<div class="empty-state"><p>Error loading immunizations.</p></div>`;
+    }
+}
+
+async function submitImmunization() {
+    const vaccine   = document.getElementById('immVaccine').value.trim();
+    const date      = document.getElementById('immDate').value;
+    const dose      = document.getElementById('immDose').value;
+    const next      = document.getElementById('immNext').value;
+    const adminBy   = document.getElementById('immAdminBy').value.trim();
+    const batch     = document.getElementById('immBatch').value.trim();
+    const remarks   = document.getElementById('immRemarks').value.trim();
+
+    if (!vaccine || !date) { showToast('Vaccine name and date are required.', 'warning'); return; }
+    if (!currentPatientId) return;
+
+    try {
+        const result = await apiPost('/api/immunizations/', {
+            patient_id:      currentPatientId,
+            vaccine_name:    vaccine,
+            date_given:      date,
+            dose_number:     dose    ? parseInt(dose) : 1,
+            next_schedule:   next    || null,
+            administered_by: adminBy || null,
+            batch_number:    batch   || null,
+            remarks:         remarks || null
+        });
+
+        if (result) {
+            showToast('Immunization record saved.', 'success');
+            ['immVaccine','immNext','immAdminBy','immBatch','immRemarks'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.value = '';
+            });
+            document.getElementById('immDose').value = '1';
+            await loadImmunizations(currentPatientId);
+            switchTab('immunizations');
+        }
+    } catch (e) {
+        showToast('Error saving immunization: ' + e.message, 'error');
+    }
+}
+
+/* ============================================================
+   ADD PATIENT FORM
+   ============================================================ */
+
+async function openAddPatientForm() {
+    await loadBarangaysForSelect('ptBarangay');
+    const form = document.getElementById('addPatientForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (form.style.display === 'block') {
+        document.getElementById('ptLast').focus();
+    }
+}
+
+async function submitNewPatient() {
+    const last   = document.getElementById('ptLast').value.trim();
+    const first  = document.getElementById('ptFirst').value.trim();
+    const birth  = document.getElementById('ptBirth').value;
+    const sex    = document.getElementById('ptSex').value;
+    const brgy   = document.getElementById('ptBarangay').value;
+    const addr   = document.getElementById('ptAddress').value.trim();
+
+    if (!last || !first || !birth || !sex || !brgy || !addr) {
+        showToast('Please fill in all required fields.', 'warning');
+        return;
+    }
+
+    try {
+        const result = await apiPost('/api/patients/', {
+            last_name:      last,
+            first_name:     first,
+            middle_name:    document.getElementById('ptMiddle').value.trim() || null,
+            birthdate:      birth,
+            sex:            sex,
+            civil_status:   document.getElementById('ptCivil').value || null,
+            barangay_id:    parseInt(brgy),
+            contact_number: document.getElementById('ptContact').value.trim() || null,
+            address:        addr,
+            philhealth_no:  document.getElementById('ptPhilhealth').value.trim() || null
+        });
+
+        if (result) {
+            showToast(`Patient ${result.last_name}, ${result.first_name} registered.`, 'success');
+            document.getElementById('addPatientForm').style.display = 'none';
+            document.getElementById('addPatientForm').querySelectorAll('input,select,textarea').forEach(el => {
+                el.tagName === 'SELECT' ? (el.selectedIndex = 0) : (el.value = '');
+            });
+            await runSearch();
+        }
+    } catch (e) {
+        showToast('Error registering patient: ' + e.message, 'error');
+    }
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+
+function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+}
+
+async function loadBarangaysForSelect(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    try {
+        const data = await apiGet('/api/disease-cases/barangays');
+        if (!data) return;
+        const first = sel.options[0];
+        sel.innerHTML = ''; sel.appendChild(first);
+        data.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.barangay_id; opt.textContent = b.barangay_name;
+            sel.appendChild(opt);
+        });
+        // If BHW, lock to their barangay
+        if (!isAdmin() && user.barangay_id) {
+            sel.value = user.barangay_id;
+            sel.disabled = true;
+        }
+    } catch (e) { console.error(e); }
+}
+
+async function handleLogout() {
+    try { await apiPost('/api/auth/logout', {}); } catch (_) {}
+    sessionStorage.clear();
+    window.location.href = '/';
+}
+
+/* ---- Init ---- */
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadBarangaysForSelect('filterBarangay');
+    await runSearch();
+});
+</script>
+</body>
+</html>

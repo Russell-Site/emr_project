@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — District 1 Health EMR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        html, body, .main-content, .sidebar {
+            visibility: hidden !important;
+        }
+        /* Show only when ready */
+        body.page-ready {
+            visibility: visible !important;
+        }
+        body.page-ready .main-content,
+        body.page-ready .sidebar {
+            visibility: visible !important;
+        }
+        /* ============================================================
+           DASHBOARD STYLES
+           Full layout: sidebar + main content
+           ============================================================ */
+        :root {
+            --primary:       #0a4f76;
+            --primary-light: #1270a8;
+            --primary-pale:  #e8f4fb;
+            --accent:        #1a8a5e;
+            --accent-light:  #22b87d;
+            --accent-pale:   #e8f8f0;
+            --danger:        #e74c3c;
+            --danger-pale:   #ffeaea;
+            --warning:       #f39c12;
+            --warning-pale:  #fff8e6;
+            --purple:        #8e44ad;
+            --purple-pale:   #f5edfb;
+            --bg:            #f0f4f8;
+            --sidebar-bg:    #0a1628;
+            --sidebar-width: 250px;
+            --card:          #ffffff;
+            --text:          #1a1a2e;
+            --text-muted:    #6b7b8d;
+            --border:        #e0e8f0;
+            --shadow-sm:     0 2px 8px rgba(10,79,118,0.08);
+            --shadow-md:     0 4px 20px rgba(10,79,118,0.12);
+            --radius:        12px;
+            --font-main:     'Sora', sans-serif;
+            --font-body:     'DM Sans', sans-serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            display: flex;
+            min-height: 100vh;
+            color: var(--text);
+        }
+
+        /* ============================================================
+           SIDEBAR
+           ============================================================ */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--sidebar-bg);
+            min-height: 100vh;
+            position: fixed; left: 0; top: 0;
+            display: flex; flex-direction: column;
+            z-index: 100;
+            transition: width 0.3s;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 22px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            display: flex; align-items: center; gap: 12px;
+        }
+        .sidebar-logo {
+            width: 40px; height: 40px; min-width: 40px;
+            background: linear-gradient(135deg, var(--accent), var(--primary-light));
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+        }
+        .sidebar-title {
+            color: #fff;
+            font-family: var(--font-main);
+            font-size: 13.5px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        .sidebar-title span {
+            display: block;
+            font-size: 10px;
+            font-weight: 400;
+            color: rgba(255,255,255,0.45);
+        }
+
+        /* User info in sidebar */
+        .sidebar-user {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            display: flex; align-items: center; gap: 11px;
+        }
+        .user-avatar {
+            width: 36px; height: 36px; min-width: 36px;
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 14px;
+            font-family: var(--font-main);
+        }
+        .user-info { overflow: hidden; }
+        .user-name {
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .user-role {
+            font-size: 10.5px;
+            color: rgba(255,255,255,0.45);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Navigation */
+        .nav-section { flex: 1; overflow-y: auto; padding: 12px 0; }
+        .nav-label {
+            padding: 8px 20px 4px;
+            color: rgba(255,255,255,0.3);
+            font-size: 9.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 11px;
+            padding: 10px 20px;
+            color: rgba(255,255,255,0.6);
+            text-decoration: none;
+            font-size: 13.5px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.18s;
+            border-left: 3px solid transparent;
+            margin: 1px 0;
+        }
+        .nav-item:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.06);
+        }
+        .nav-item.active {
+            color: #fff;
+            background: rgba(26,138,94,0.2);
+            border-left-color: var(--accent-light);
+        }
+        .nav-item .nav-icon { font-size: 17px; min-width: 20px; text-align: center; }
+        .nav-badge {
+            margin-left: auto;
+            background: var(--accent);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 20px;
+        }
+        /* Hide admin-only items for BHW by default.
+           JS will override display:none for admin users.
+           Using a class-based approach for reliable toggling. */
+        .admin-only { display: none; }
+        body.is-admin .admin-only { display: block; }
+        body.is-admin a.admin-only { display: flex; }
+        body.is-admin select.admin-only { display: block; }
+
+        .sidebar-footer {
+            padding: 14px 20px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+        }
+        .btn-logout {
+            display: flex; align-items: center; gap: 10px;
+            color: rgba(255,255,255,0.5);
+            font-size: 13px;
+            cursor: pointer;
+            transition: color 0.2s;
+            background: none; border: none; width: 100%;
+            padding: 8px 0;
+        }
+        .btn-logout:hover { color: var(--danger); }
+
+        /* ============================================================
+           MAIN CONTENT
+           ============================================================ */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Top bar */
+        .topbar {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 0 28px;
+            height: 62px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+            box-shadow: var(--shadow-sm);
+        }
+        .topbar-left { display: flex; align-items: center; gap: 10px; }
+        .page-title {
+            font-family: var(--font-main);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .page-breadcrumb {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .topbar-right { display: flex; align-items: center; gap: 14px; }
+        .topbar-btn {
+            background: none; border: none;
+            color: var(--text-muted); font-size: 18px;
+            cursor: pointer; padding: 6px;
+            border-radius: 8px; transition: all 0.2s;
+        }
+        .topbar-btn:hover { background: var(--bg); color: var(--primary); }
+
+        /* Notification dot */
+        .notif-wrap { position: relative; }
+        .notif-dot {
+            position: absolute; top: 3px; right: 3px;
+            width: 8px; height: 8px;
+            background: var(--danger);
+            border-radius: 50%;
+            border: 2px solid #fff;
+        }
+
+        /* Date/time chip */
+        .datetime-chip {
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg);
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        /* ============================================================
+           PAGE SECTIONS (views)
+           ============================================================ */
+        .page-section {
+            display: none;
+            padding: 28px;
+            animation: fadeIn 0.3s ease;
+        }
+        .page-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 22px;
+        }
+        .section-title {
+            font-family: var(--font-main);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .section-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ============================================================
+           STAT CARDS
+           ============================================================ */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+        }
+        .stat-card.blue::after   { background: var(--primary); }
+        .stat-card.green::after  { background: var(--accent); }
+        .stat-card.red::after    { background: var(--danger); }
+        .stat-card.orange::after { background: var(--warning); }
+        .stat-card.purple::after { background: var(--purple); }
+
+        .stat-icon {
+            width: 44px; height: 44px;
+            border-radius: 11px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            margin-bottom: 14px;
+        }
+        .stat-card.blue   .stat-icon { background: var(--primary-pale); }
+        .stat-card.green  .stat-icon { background: var(--accent-pale); }
+        .stat-card.red    .stat-icon { background: var(--danger-pale); }
+        .stat-card.orange .stat-icon { background: var(--warning-pale); }
+        .stat-card.purple .stat-icon { background: var(--purple-pale); }
+
+        .stat-value {
+            font-family: var(--font-main);
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 3px;
+        }
+        .stat-label {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* ============================================================
+           CARDS
+           ============================================================ */
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-title {
+            font-family: var(--font-main);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .card-body { padding: 20px; }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* ============================================================
+           TABLE STYLES
+           ============================================================ */
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+        }
+        thead th {
+            background: var(--bg);
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        tbody tr:hover { background: var(--primary-pale); }
+        tbody td { padding: 11px 14px; color: var(--text); }
+        tbody tr:last-child { border-bottom: none; }
+
+        /* Status badges */
+        .badge {
+            display: inline-flex; align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px; font-weight: 600;
+        }
+        .badge-active   { background: var(--accent-pale);  color: var(--accent); }
+        .badge-inactive { background: var(--bg);            color: var(--text-muted); }
+        .badge-locked   { background: var(--danger-pale);  color: var(--danger); }
+        .badge-male     { background: var(--primary-pale); color: var(--primary); }
+        .badge-female   { background: var(--purple-pale);  color: var(--purple); }
+        .badge-admin    { background: var(--warning-pale); color: var(--warning); }
+        .badge-bhw      { background: var(--primary-pale); color: var(--primary); }
+
+        /* ============================================================
+           FORM STYLES
+           ============================================================ */
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .form-group-field { margin-bottom: 16px; }
+        .form-group-field label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+            font-family: var(--font-main);
+        }
+        .form-group-field input,
+        .form-group-field select,
+        .form-group-field textarea {
+            width: 100%;
+            padding: 10px 13px;
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            font-family: var(--font-body);
+            font-size: 13.5px;
+            color: var(--text);
+            background: #f7fafc;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .form-group-field input:focus,
+        .form-group-field select:focus,
+        .form-group-field textarea:focus {
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(10,79,118,0.08);
+        }
+        .form-group-field textarea { resize: vertical; min-height: 80px; }
+
+        /* ============================================================
+           BUTTONS
+           ============================================================ */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 18px;
+            border-radius: 9px;
+            font-family: var(--font-main);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s;
+            border: 1.5px solid transparent;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+        .btn-primary:hover { background: var(--primary-light); box-shadow: 0 4px 14px rgba(10,79,118,0.3); transform: translateY(-1px); }
+
+        .btn-success {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-success:hover { background: var(--accent-light); box-shadow: 0 4px 14px rgba(26,138,94,0.3); }
+
+        .btn-outline {
+            background: transparent;
+            border-color: var(--border);
+            color: var(--text-muted);
+        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-pale); }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+        .btn-danger:hover { opacity: 0.88; }
+
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* ============================================================
+           SEARCH & FILTER BAR
+           ============================================================ */
+        .search-bar {
+            display: flex; align-items: center; gap: 10px;
+            flex-wrap: wrap;
+            background: var(--card);
+            padding: 14px 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+        .search-input-wrap {
+            position: relative;
+            flex: 1; min-width: 200px;
+        }
+        .search-input-wrap .search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: var(--text-muted); font-size: 15px;
+        }
+        .search-input-wrap input {
+            width: 100%;
+            padding: 9px 13px 9px 36px;
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            font-size: 13.5px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .search-input-wrap input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(10,79,118,0.08);
+        }
+        .filter-select {
+            padding: 9px 13px;
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            font-size: 13px;
+            background: #f7fafc;
+            cursor: pointer;
+            outline: none;
+            min-width: 130px;
+        }
+        .filter-select:focus { border-color: var(--primary); }
+
+        /* ============================================================
+           MODALS
+           ============================================================ */
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(10,30,50,0.55);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--card);
+            border-radius: 16px;
+            width: 100%; max-width: 560px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            animation: slideUp 0.3s ease;
+        }
+        .modal.modal-lg { max-width: 720px; }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .modal-header {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .modal-title {
+            font-family: var(--font-main);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .modal-close {
+            background: none; border: none;
+            color: var(--text-muted); font-size: 20px;
+            cursor: pointer; padding: 4px;
+            border-radius: 6px; transition: all 0.2s;
+        }
+        .modal-close:hover { background: var(--bg); color: var(--danger); }
+        .modal-body { padding: 22px 24px; }
+        .modal-footer {
+            padding: 14px 24px;
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+        }
+
+        /* ============================================================
+           TOAST NOTIFICATIONS
+           ============================================================ */
+        #toastContainer {
+            position: fixed; top: 20px; right: 20px;
+            z-index: 9000; display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 13px 18px;
+            display: flex; align-items: center; gap: 11px;
+            min-width: 280px; max-width: 360px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            border-left: 4px solid;
+            animation: toastIn 0.3s ease;
+            font-size: 13.5px;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        .toast.success { border-color: var(--accent); }
+        .toast.error   { border-color: var(--danger); }
+        .toast.warning { border-color: var(--warning); }
+        .toast.info    { border-color: var(--primary); }
+
+        /* ============================================================
+           SESSION LOCK OVERLAY (shared across pages)
+           ============================================================ */
+        #sessionLock {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(10,30,50,0.9);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        #sessionLock.show { display: flex; }
+        .lock-card {
+            background: #fff;
+            border-radius: 18px;
+            padding: 40px 36px;
+            text-align: center;
+            width: 340px;
+            box-shadow: 0 24px 70px rgba(0,0,0,0.4);
+        }
+        .lock-icon { font-size: 46px; margin-bottom: 14px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        .lock-card h2 { font-family: var(--font-main); font-size: 20px; margin-bottom: 6px; }
+        .lock-card p  { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f4f8 25%, #e0e8f0 50%, #f0f4f8 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: 6px;
+        }
+        @keyframes shimmer { from{background-position:200%} to{background-position:-200%} }
+
+        /* OTP modal specific */
+        .otp-input-group { display: flex; gap: 8px; justify-content: center; margin: 20px 0; }
+        .otp-digit {
+            width: 48px; height: 56px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 22px; font-weight: 700;
+            text-align: center;
+            font-family: var(--font-main);
+            outline: none; transition: all 0.2s;
+        }
+        .otp-digit:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(10,79,118,0.1); }
+
+        /* Chart container */
+        .chart-container { position: relative; width: 100%; }
+
+        /* Responsive adjustments */
+        @media (max-width: 1024px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .grid-3 { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 700px) {
+            .sidebar { width: 60px; }
+            .sidebar-title, .sidebar-user .user-info, .nav-item span:not(.nav-icon), .nav-label, .sidebar-footer .btn-logout span { display: none; }
+            .main-content { margin-left: 60px; }
+            .form-row { grid-template-columns: 1fr; }
+            .grid-3 { grid-template-columns: 1fr; }
+        }
+
+        /* Print styles */
+        @media print {
+            .sidebar, .topbar, .btn, .modal-overlay { display: none !important; }
+            .main-content { margin-left: 0; }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center; padding: 50px 20px;
+            color: var(--text-muted);
+        }
+        .empty-state .empty-icon { font-size: 48px; margin-bottom: 14px; opacity: 0.5; }
+        .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+        .empty-state p { font-size: 13px; }
+
+                /* Hide body until page is ready for section switch */
+        body.loading {
+            visibility: hidden;
+        }
+        body.loaded {
+            visibility: visible;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">🏥</div>
+        <div class="sidebar-title">
+            District 1 EMR
+            <span>Health Management System</span>
+        </div>
+    </div>
+
+    <div class="sidebar-user">
+        <div class="user-avatar" id="userAvatarSidebar">A</div>
+        <div class="user-info">
+            <div class="user-name" id="userNameSidebar">Loading...</div>
+            <div class="user-role" id="userRoleSidebar">—</div>
+        </div>
+    </div>
+
+    <nav class="nav-section">
+        <div class="nav-label">Main Menu</div>
+        <a class="nav-item active" onclick="showSection('dashboard')" data-section="dashboard">
+            <span class="nav-icon">▣</span>
+            <span>Dashboard</span>
+        </a>
+        <a class="nav-item" href="/frontend/pages/patients.html" data-section="patients">
+            <span class="nav-icon">▤</span>
+            <span>Patients</span>
+        </a>
+
+        <a class="nav-item" onclick="showSection('disease-cases')" data-section="disease-cases">
+            <span class="nav-icon">◎</span>
+            <span>Surveillance</span>
+        </a>
+
+        <div class="nav-label">Analytics</div>
+        <a class="nav-item" onclick="showSection('analytics')" data-section="analytics">
+            <span class="nav-icon">◫</span>
+            <span>Disease Trends</span>
+        </a>
+
+        <!-- Admin only items -->
+        <div class="nav-label admin-only">Administration</div>
+        <a class="nav-item admin-only" onclick="showSection('bhw-management')" data-section="bhw-management">
+            <span class="nav-icon">◻</span>
+            <span>BHW Management</span>
+        </a>
+        <a class="nav-item admin-only" onclick="showSection('reports')" data-section="reports">
+            <span class="nav-icon">◪</span>
+            <span>Reports</span>
+        </a>
+        <a class="nav-item admin-only" onclick="showSection('audit-logs')" data-section="audit-logs">
+            <span class="nav-icon">◩</span>
+            <span>Audit Logs</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button class="btn-logout" onclick="handleLogout()">
+            <span>Sign Out</span>
+        </button>
+    </div>
+</aside>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <span class="page-title" id="pageTitle">Dashboard</span>
+        </div>
+        <div class="topbar-right">
+            <div class="datetime-chip" id="datetimeChip">—</div>
+        </div>
+    </header>
+
+    <!-- ===== DASHBOARD SECTION ===== -->
+    <section class="page-section active" id="section-dashboard">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Overview</div>
+                <div class="section-subtitle" id="dashWelcome">Welcome back!</div>
+            </div>
+            <div id="dashMonthLabel" style="font-size:13px;color:var(--text-muted);background:var(--bg);padding:6px 14px;border-radius:20px;border:1px solid var(--border);">📅 —</div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card blue">
+                <div class="stat-icon">👥</div>
+                <div class="stat-value" id="statPatients">—</div>
+                <div class="stat-label">Total Patients</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-icon">📋</div>
+                <div class="stat-value" id="statRecords">—</div>
+                <div class="stat-label">Medical Records</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-icon">💉</div>
+                <div class="stat-value" id="statImmunizations">—</div>
+                <div class="stat-label">Immunizations</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-icon">🦠</div>
+                <div class="stat-value" id="statCases">—</div>
+                <div class="stat-label">Cases This Month</div>
+            </div>
+            <div class="stat-card purple admin-only">
+                <div class="stat-icon">👤</div>
+                <div class="stat-value" id="statBHW">—</div>
+                <div class="stat-label">Active BHW</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Monthly Disease Trend</div>
+                    <select class="filter-select" id="trendYearFilter" onchange="loadTrendChart()" style="width:auto;padding:5px 10px;font-size:12px;">
+                        <option selected>2026</option>
+                        <option>2025</option>
+                        <option>2024</option>
+                        <option>2023</option>
+                    </select>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:260px;">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Top Diseases</div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:260px;">
+                        <canvas id="topDiseasesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Cases Per Barangay</div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:240px;">
+                        <canvas id="barangayChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Age Distribution</div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:240px;">
+                        <canvas id="ageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== PATIENTS SECTION ===== -->
+    <section class="page-section" id="section-patients">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Patient Records</div>
+                <div class="section-subtitle">Manage and view all patient information</div>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('addPatientModal')">
+                Add Patient
+            </button>
+        </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="search-bar">
+            <div class="search-input-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="patientSearch" placeholder="Search by name or contact number..." oninput="debounceSearch()">
+            </div>
+            <select class="filter-select" id="filterBarangay" onchange="loadPatients()">
+                <option value="">All Barangays</option>
+            </select>
+            <select class="filter-select" id="filterSex" onchange="loadPatients()">
+                <option value="">All Sex</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="clearFilters()">✕ Clear</button>
+        </div>
+
+        <div class="card">
+            <div class="card-body" style="padding:0;">
+                <div class="table-wrap">
+                    <table id="patientsTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Full Name</th>
+                                <th>Age / Sex</th>
+                                <th>Barangay</th>
+                                <th>Contact</th>
+                                <th>PhilHealth</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientsTableBody">
+                            <tr><td colspan="7">
+                                <div class="empty-state">
+                                    <div class="empty-icon">👥</div>
+                                    <h3>Loading patients...</h3>
+                                </div>
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== ANALYTICS SECTION ===== -->
+    <section class="page-section" id="section-analytics">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Disease Trend Analytics</div>
+                <div class="section-subtitle">Visual analysis of disease patterns per barangay</div>
+            </div>
+            <div style="display:flex;gap:10px;">
+                <select class="filter-select" id="analyticsYear" onchange="loadAnalyticsCharts()">
+                    <option selected>2026</option>
+                    <option>2025</option>
+                    <option>2024</option>
+                    <option>2023</option>
+                </select>
+                <select class="filter-select admin-only" id="analyticsBarangay" onchange="loadAnalyticsCharts()">
+                    <option value="">All Barangays</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-header">
+                <div class="card-title">Monthly Disease Trends</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height:360px;">
+                    <canvas id="analyticsLineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header"><div class="card-title">Cases Per Barangay</div></div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:280px;">
+                        <canvas id="analyticsBarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><div class="card-title">Top Diseases Distribution</div></div>
+                <div class="card-body">
+                    <div class="chart-container" style="height:280px;">
+                        <canvas id="analyticsPieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== BHW MANAGEMENT (Admin Only) ===== -->
+    <section class="page-section" id="section-bhw-management">
+        <div class="section-header">
+            <div>
+                <div class="section-title">BHW Management</div>
+                <div class="section-subtitle">Manage Barangay Health Worker accounts</div>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('otpRequestModal')">
+                Register New BHW
+            </button>
+        </div>
+
+        <!-- BHW Stats -->
+        <div class="stats-grid" style="margin-bottom:20px;">
+            <div class="stat-card blue">
+                <div class="stat-icon">👥</div>
+                <div class="stat-value" id="bhwTotal">—</div>
+                <div class="stat-label">Total BHW</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-icon">✅</div>
+                <div class="stat-value" id="bhwActive">—</div>
+                <div class="stat-label">Active</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-icon">⏸️</div>
+                <div class="stat-value" id="bhwInactive">—</div>
+                <div class="stat-label">Inactive</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-icon">🔒</div>
+                <div class="stat-value" id="bhwLocked">—</div>
+                <div class="stat-label">Locked</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body" style="padding:0;">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Barangay</th>
+                                <th>Position</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bhwTableBody">
+                            <tr><td colspan="8">
+                                <div class="empty-state">
+                                    <div class="empty-icon">👤</div>
+                                    <h3>Loading BHW accounts...</h3>
+                                </div>
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== REPORTS SECTION (Admin Only) ===== -->
+    <section class="page-section" id="section-reports">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Reports &amp; PDF Export</div>
+                <div class="section-subtitle">Generate and download official health reports</div>
+            </div>
+        </div>
+
+        <div class="grid-3">
+            <!-- Patient Report Card -->
+            <div class="card">
+                <div class="card-body" style="text-align:center;padding:30px 20px;">
+                    <div style="font-size:48px;margin-bottom:14px;">📋</div>
+                    <h3 style="font-family:var(--font-main);font-size:16px;margin-bottom:8px;">Patient Records</h3>
+                    <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+                        Summary of all registered patients per barangay
+                    </p>
+                    <div class="form-group-field">
+                        <label>Barangay Filter</label>
+                        <select id="reportPatientBarangay" class="filter-select" style="width:100%">
+                            <option value="">All Barangays</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="generateReport('patients')">
+                        ⬇️ Download PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- Disease Trend Report Card -->
+            <div class="card">
+                <div class="card-body" style="text-align:center;padding:30px 20px;">
+                    <div style="font-size:48px;margin-bottom:14px;">📊</div>
+                    <h3 style="font-family:var(--font-main);font-size:16px;margin-bottom:8px;">Disease Trends</h3>
+                    <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+                        Disease case trends and statistics per barangay
+                    </p>
+                    <div class="form-group-field">
+                        <label>Year</label>
+                        <select id="reportDiseaseYear" class="filter-select" style="width:100%">
+                            <option selected>2026</option>
+                            <option>2025</option>
+                            <option>2024</option>
+                            <option>2023</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-success" style="width:100%;" onclick="generateReport('disease-trends')">
+                        ⬇️ Download PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- Immunization Report Card -->
+            <div class="card">
+                <div class="card-body" style="text-align:center;padding:30px 20px;">
+                    <div style="font-size:48px;margin-bottom:14px;">💉</div>
+                    <h3 style="font-family:var(--font-main);font-size:16px;margin-bottom:8px;">Immunization</h3>
+                    <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;">
+                        Complete immunization records per barangay
+                    </p>
+                    <div class="form-group-field">
+                        <label>Barangay Filter</label>
+                        <select id="reportImmunBarangay" class="filter-select" style="width:100%">
+                            <option value="">All Barangays</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline" style="width:100%;border-color:var(--primary);color:var(--primary);" onclick="generateReport('immunization')">
+                        ⬇️ Download PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== AUDIT LOGS SECTION (Admin Only) ===== -->
+    <section class="page-section" id="section-audit-logs">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Audit Logs</div>
+                <div class="section-subtitle">Complete record of all system activities</div>
+            </div>
+            <button class="btn btn-outline" onclick="loadAuditLogs()">🔄 Refresh</button>
+        </div>
+
+        <div class="card">
+            <div class="card-body" style="padding:0;">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Barangay</th>
+                                <th>Action</th>
+                                <th>IP Address</th>
+                                <th>Date &amp; Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditTableBody">
+                            <tr><td colspan="6">
+                                <div class="empty-state">
+                                    <div class="empty-icon">🔍</div>
+                                    <h3>Loading audit logs...</h3>
+                                </div>
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Placeholder sections for medical records, immunizations, disease cases -->
+    <section class="page-section" id="section-medical-records">
+        <div class="section-header">
+            <div><div class="section-title">Medical Records</div></div>
+            <button class="btn btn-primary" onclick="openModal('addRecordModal')">➕ Add Record</button>
+        </div>
+        <div class="card"><div class="card-body">
+            <p style="color:var(--text-muted);font-size:13px;">Select a patient first to view their medical records.</p>
+        </div></div>
+    </section>
+    <section class="page-section" id="section-immunizations">
+        <div class="section-header">
+            <div><div class="section-title">Immunization Records</div></div>
+            <button class="btn btn-primary" onclick="openModal('addImmunModal')">➕ Add Immunization</button>
+        </div>
+        <div class="card"><div class="card-body">
+            <p style="color:var(--text-muted);font-size:13px;">Select a patient first to view their immunization records.</p>
+        </div></div>
+    </section>
+    <section class="page-section" id="section-disease-cases">
+        <div class="section-header">
+            <div>
+                <div class="section-title">Disease Surveillance</div>
+                <div class="section-subtitle">
+                    Cases are auto-counted from patient diagnosis entries.
+                    Use this panel to review, filter, and manage surveillance data.
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <select class="filter-select" id="surv-year" onchange="loadSurveillance()" style="width:auto;">
+                    <option selected>2026</option>
+                    <option>2025</option>
+                    <option>2024</option>
+                    <option>2023</option>
+                </select>
+                <select class="filter-select admin-only" id="surv-barangay" onchange="loadSurveillance()" style="width:auto;">
+                    <option value="">All Barangays</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="loadSurveillance()">Refresh</button>
+            </div>
+        </div>
+
+        <!-- Summary stat row -->
+        <div class="stats-grid" id="survStatsGrid" style="margin-bottom:18px;"></div>
+
+        <!-- Top diseases table + trend mini chart side by side -->
+        <div class="grid-2" style="margin-bottom:16px;">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Case Count by Disease</div>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <div class="table-wrap">
+                        <table id="survTable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Disease</th>
+                                    <th>Category</th>
+                                    <th>Total Cases</th>
+                                    <th>Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody id="survTableBody">
+                                <tr><td colspan="5"><div class="empty-state">
+                                    <div class="empty-icon">🦠</div>
+                                    <h3>Loading surveillance data...</h3>
+                                </div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Monthly Case Trend</div>
+                </div>
+                <div class="card-body">
+                    <div style="height:280px;position:relative;">
+                        <canvas id="survTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent auto-recorded entries log -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Recent Auto-Recorded Cases</div>
+                <span style="font-size:12px;color:var(--text-muted);">Automatically generated from patient diagnosis entries</span>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Disease</th>
+                                <th>Barangay</th>
+                                <th>Cases</th>
+                                <th>Source</th>
+                            </tr>
+                        </thead>
+                        <tbody id="survRecentBody">
+                            <tr><td colspan="5" style="padding:20px;color:var(--text-muted);font-size:13px;text-align:center;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main><!-- end main-content -->
+
+<!-- ===== MODALS ===== -->
+
+<!-- Add Patient Modal -->
+<div class="modal-overlay" id="addPatientModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <span class="modal-title">➕ Register New Patient</span>
+            <button class="modal-close" onclick="closeModal('addPatientModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <form id="addPatientForm">
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Last Name *</label>
+                        <input type="text" id="ptLastName" required maxlength="100">
+                    </div>
+                    <div class="form-group-field">
+                        <label>First Name *</label>
+                        <input type="text" id="ptFirstName" required maxlength="100">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Middle Name</label>
+                        <input type="text" id="ptMiddleName" maxlength="100">
+                    </div>
+                    <div class="form-group-field">
+                        <label>Birthdate *</label>
+                        <input type="date" id="ptBirthdate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Sex *</label>
+                        <select id="ptSex" required>
+                            <option value="">-- Select --</option>
+                            <option>Male</option>
+                            <option>Female</option>
+                        </select>
+                    </div>
+                    <div class="form-group-field">
+                        <label>Civil Status</label>
+                        <select id="ptCivilStatus">
+                            <option value="">-- Select --</option>
+                            <option>Single</option>
+                            <option>Married</option>
+                            <option>Widowed</option>
+                            <option>Separated</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Barangay *</label>
+                        <select id="ptBarangay" required>
+                            <option value="">-- Select Barangay --</option>
+                        </select>
+                    </div>
+                    <div class="form-group-field">
+                        <label>Contact Number</label>
+                        <input type="text" id="ptContact" maxlength="20" placeholder="09XXXXXXXXX">
+                    </div>
+                </div>
+                <div class="form-group-field">
+                    <label>Address *</label>
+                    <textarea id="ptAddress" required placeholder="House #, Street, Barangay..."></textarea>
+                </div>
+                <div class="form-group-field">
+                    <label>PhilHealth No.</label>
+                    <input type="text" id="ptPhilhealth" maxlength="30" placeholder="XX-XXXXXXXXX-X">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('addPatientModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitAddPatient()">💾 Save Patient</button>
+        </div>
+    </div>
+</div>
+
+<!-- OTP Request Modal (for BHW Registration) -->
+<div class="modal-overlay" id="otpRequestModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">🔐 Admin Verification Required</span>
+            <button class="modal-close" onclick="closeModal('otpRequestModal')">✕</button>
+        </div>
+        <div class="modal-body" style="text-align:center;">
+            <div style="font-size:52px;margin-bottom:16px;">📧</div>
+            <p style="color:var(--text-muted);font-size:14px;margin-bottom:20px;">
+                To register a new BHW account, an OTP will be sent to your registered email address for verification.
+            </p>
+            <button class="btn btn-primary" style="width:100%;" onclick="requestOTP()">
+                📨 Send OTP to My Email
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- OTP Verify Modal -->
+<div class="modal-overlay" id="otpVerifyModal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">✅ Enter OTP</span>
+            <button class="modal-close" onclick="closeModal('otpVerifyModal')">✕</button>
+        </div>
+        <div class="modal-body" style="text-align:center;">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">Enter the 6-digit OTP sent to your email.</p>
+            <p style="font-size:12px;color:var(--warning);margin-bottom:16px;">⏱️ Valid for 10 minutes only.</p>
+            <div class="otp-input-group">
+                <input class="otp-digit" maxlength="1" id="otp1">
+                <input class="otp-digit" maxlength="1" id="otp2">
+                <input class="otp-digit" maxlength="1" id="otp3">
+                <input class="otp-digit" maxlength="1" id="otp4">
+                <input class="otp-digit" maxlength="1" id="otp5">
+                <input class="otp-digit" maxlength="1" id="otp6">
+            </div>
+            <div id="otpError" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none;">
+                ⚠️ Invalid OTP. Please try again.
+            </div>
+            <button class="btn btn-primary" style="width:100%;" onclick="verifyOTP()">
+                ✅ Verify OTP
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Register BHW Modal -->
+<div class="modal-overlay" id="registerBHWModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <span class="modal-title">👤 Register New BHW Account</span>
+            <button class="modal-close" onclick="closeModal('registerBHWModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <form id="registerBHWForm">
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Full Name *</label>
+                        <input type="text" id="bhwName" required>
+                    </div>
+                    <div class="form-group-field">
+                        <label>Email Address *</label>
+                        <input type="email" id="bhwEmail" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Assigned Barangay *</label>
+                        <select id="bhwBarangay" required>
+                            <option value="">-- Select Barangay --</option>
+                        </select>
+                    </div>
+                    <div class="form-group-field">
+                        <label>Position</label>
+                        <input type="text" id="bhwPosition" placeholder="e.g. Barangay Health Worker">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-field">
+                        <label>Password *</label>
+                        <input type="password" id="bhwPassword" required placeholder="Min. 8 characters">
+                    </div>
+                    <div class="form-group-field">
+                        <label>Confirm Password *</label>
+                        <input type="password" id="bhwConfirmPassword" required>
+                    </div>
+                </div>
+                <div style="background:var(--accent-pale);border:1px solid var(--accent);border-radius:9px;padding:12px 14px;font-size:12.5px;color:var(--accent);">
+                    🔐 Password must contain uppercase, lowercase, number, and special character.
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('registerBHWModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitRegisterBHW()">💾 Register BHW</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Session Lock -->
+<div id="sessionLock">
+    <div class="lock-card">
+        <div class="lock-icon">🔒</div>
+        <h2>Session Locked</h2>
+        <p>Session locked due to inactivity.<br>Please re-enter your password.</p>
+        <div style="position:relative;margin-bottom:10px;">
+            <input type="password" id="unlockPassword" placeholder="Enter your password"
+                style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;outline:none;"
+                onkeydown="if(event.key==='Enter')unlockSession()">
+        </div>
+        <div id="unlockError" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none;">
+            ⚠️ Incorrect password.
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="unlockSession()">🔓 Unlock</button>
+        <div style="margin-top:12px;">
+            <a href="/" style="font-size:12px;color:var(--text-muted);text-decoration:none;">
+                Sign in as different user →
+            </a>
+        </div>
+    </div>
+</div>
+
+
+<!-- Toast Container -->
+<div id="toastContainer"></div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script src="../js/api.js"></script>
+<script src="../js/dashboard.js"></script>
+<script src="../js/patients.js"></script>
+<script src="../js/analytics.js"></script>
+<script src="../js/session.js"></script>
+
+<script>
+(function() {
+    let hasSwitched = false;
+    
+    function loadRequestedSection() {
+        if (hasSwitched) return;
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        let section = urlParams.get('section');
+        
+        if (!section && window.location.hash) {
+            section = window.location.hash.substring(1);
+        }
+        
+        const validSections = [
+            'dashboard', 'patients', 'disease-cases', 'analytics', 
+            'bhw-management', 'reports', 'audit-logs',
+            'medical-records', 'immunizations'
+        ];
+        
+        if (section && validSections.includes(section)) {
+            hasSwitched = true;
+            
+            // Switch to target section
+            if (typeof showSection === 'function') {
+                showSection(section);
+            } else {
+                document.querySelectorAll('.page-section').forEach(function(sec) {
+                    sec.classList.remove('active');
+                });
+                var target = document.getElementById('section-' + section);
+                if (target) target.classList.add('active');
+                
+                document.querySelectorAll('.nav-item').forEach(function(item) {
+                    var itemSection = item.getAttribute('data-section');
+                    if (itemSection === section) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+            }
+            
+            // Update page title
+            var titles = {
+                'dashboard': 'Dashboard',
+                'patients': 'Patient Records', 
+                'disease-cases': 'Disease Surveillance',
+                'analytics': 'Disease Trends',
+                'bhw-management': 'BHW Management',
+                'reports': 'Reports & Export',
+                'audit-logs': 'Audit Logs'
+            };
+            if (titles[section] && document.getElementById('pageTitle')) {
+                document.getElementById('pageTitle').textContent = titles[section];
+            }
+            
+            // Clear URL parameter
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+        
+        // Show the page (remove the hidden class)
+        document.body.classList.add('page-ready');
+    }
+    
+    // Run as soon as DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadRequestedSection);
+    } else {
+        loadRequestedSection();
+    }
+    
+    // Fallback: show page after 500ms kahit walang section
+    setTimeout(function() {
+        document.body.classList.add('page-ready');
+    }, 500);
+})();
+</script>
+</script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+/* ============================================================
+   global.css — Shared Stylesheet
+   Ginagamit ng lahat ng pages para sa consistent na look and feel
+   Medical-grade design: teal, navy, white
+   ============================================================ */
+
+/* ---- Google Fonts Import ---- */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ---- CSS Custom Properties (Design Tokens) ---- */
+:root {
+    /* Colors */
+    --color-primary:       #0a4f76;
+    --color-primary-light: #1270a8;
+    --color-primary-dark:  #073a58;
+    --color-primary-pale:  #e8f4fb;
+
+    --color-accent:        #1a8a5e;
+    --color-accent-light:  #22b87d;
+    --color-accent-dark:   #136b49;
+    --color-accent-pale:   #e8f8f0;
+
+    --color-danger:        #e74c3c;
+    --color-danger-light:  #e96b5d;
+    --color-danger-pale:   #ffeaea;
+
+    --color-warning:       #f39c12;
+    --color-warning-pale:  #fff8e6;
+
+    --color-purple:        #8e44ad;
+    --color-purple-pale:   #f5edfb;
+
+    --color-info:          #2980b9;
+    --color-info-pale:     #e8f3fb;
+
+    /* Neutrals */
+    --color-bg:            #f0f4f8;
+    --color-card:          #ffffff;
+    --color-sidebar:       #0a1628;
+    --color-text:          #1a1a2e;
+    --color-text-muted:    #6b7b8d;
+    --color-text-light:    #9aabb9;
+    --color-border:        #d0dce8;
+    --color-border-light:  #e8f0f6;
+
+    /* Typography */
+    --font-heading: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body:    'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono:    'Courier New', Courier, monospace;
+
+    --text-xs:    11px;
+    --text-sm:    12.5px;
+    --text-base:  14px;
+    --text-md:    15px;
+    --text-lg:    17px;
+    --text-xl:    20px;
+    --text-2xl:   24px;
+    --text-3xl:   30px;
+
+    /* Spacing */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* Shadows */
+    --shadow-xs:  0 1px 3px rgba(10,79,118,0.06);
+    --shadow-sm:  0 2px 8px rgba(10,79,118,0.08);
+    --shadow-md:  0 4px 20px rgba(10,79,118,0.12);
+    --shadow-lg:  0 8px 40px rgba(10,79,118,0.16);
+    --shadow-xl:  0 16px 60px rgba(10,79,118,0.20);
+
+    /* Border Radius */
+    --radius-sm:  6px;
+    --radius-md:  10px;
+    --radius-lg:  14px;
+    --radius-xl:  18px;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --transition-fast:   all 0.15s ease;
+    --transition-normal: all 0.25s ease;
+    --transition-slow:   all 0.4s ease;
+
+    /* Layout */
+    --sidebar-width: 250px;
+    --topbar-height: 62px;
+}
+
+/* ============================================================
+   RESET & BASE STYLES
+   ============================================================ */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin:     0;
+    padding:    0;
+}
+
+html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family:      var(--font-body);
+    font-size:        var(--text-base);
+    color:            var(--color-text);
+    background-color: var(--color-bg);
+    line-height:      1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Links */
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+a:hover { color: var(--color-primary-light); }
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--color-text);
+}
+
+/* Images */
+img { max-width: 100%; display: block; }
+
+/* ============================================================
+   SCROLLBAR STYLING
+   ============================================================ */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: var(--color-bg); }
+::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* ============================================================
+   PRINT STYLES
+   ============================================================ */
+@media print {
+    .sidebar, .topbar, .btn, .modal-overlay,
+    #sessionLock, #toastContainer { display: none !important; }
+
+    .main-content { margin-left: 0 !important; }
+
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #ccc !important;
+        break-inside: avoid;
+    }
+
+    body { background: white !important; }
+}
+
+/* ============================================================
+   ACCESSIBILITY
+   ============================================================ */
+
+/* Focus styles para sa keyboard navigation */
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Skip to main content para sa screen readers */
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 10px;
+    background: var(--color-primary);
+    color: white;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    z-index: 99999;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    transition: top 0.2s;
+}
+.skip-link:focus { top: 10px; }
+
+/* Reduced motion para sa users na may motion sensitivity */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration:   0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration:  0.01ms !important;
+    }
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   ============================================================ */
+
+/* Text utilities */
+.text-primary  { color: var(--color-primary); }
+.text-accent   { color: var(--color-accent); }
+.text-danger   { color: var(--color-danger); }
+.text-warning  { color: var(--color-warning); }
+.text-muted    { color: var(--color-text-muted); }
+.text-center   { text-align: center; }
+.text-right    { text-align: right; }
+.text-xs       { font-size: var(--text-xs); }
+.text-sm       { font-size: var(--text-sm); }
+.text-lg       { font-size: var(--text-lg); }
+.font-bold     { font-weight: 700; }
+.font-semibold { font-weight: 600; }
+.font-heading  { font-family: var(--font-heading); }
+
+/* Display utilities */
+.d-flex         { display: flex; }
+.d-grid         { display: grid; }
+.d-none         { display: none; }
+.flex-center    { display: flex; align-items: center; justify-content: center; }
+.flex-between   { display: flex; align-items: center; justify-content: space-between; }
+.align-center   { align-items: center; }
+.gap-1  { gap: var(--space-1); }
+.gap-2  { gap: var(--space-2); }
+.gap-3  { gap: var(--space-3); }
+.gap-4  { gap: var(--space-4); }
+
+/* Spacing utilities */
+.mb-1 { margin-bottom: var(--space-1); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mt-4 { margin-top: var(--space-4); }
+
+/* Background utilities */
+.bg-primary-pale { background: var(--color-primary-pale); }
+.bg-accent-pale  { background: var(--color-accent-pale); }
+.bg-white        { background: white; }
+
+/* Border utilities */
+.border        { border: 1px solid var(--color-border); }
+.rounded       { border-radius: var(--radius-md); }
+.rounded-lg    { border-radius: var(--radius-lg); }
+.rounded-full  { border-radius: var(--radius-full); }
+
+/* Shadow utilities */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+
+/* Overflow */
+.overflow-hidden { overflow: hidden; }
+.overflow-auto   { overflow: auto; }
+.truncate        { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Width & Height */
+.w-full  { width: 100%; }
+.h-full  { height: 100%; }
+
+/* Position */
+.relative { position: relative; }
+.absolute { position: absolute; }
+.fixed    { position: fixed; }
+
+/* Responsive hiding */
+@media (max-width: 768px) {
+    .hide-mobile { display: none !important; }
+}
+@media (min-width: 769px) {
+    .show-mobile { display: none !important; }
+}
+
+/* ============================================================
+   PRINT-SPECIFIC HEADER (for PDF exported pages)
+   ============================================================ */
+.print-header {
+    display: none;
+    text-align: center;
+    padding: 20px;
+    border-bottom: 2px solid var(--color-primary);
+    margin-bottom: 20px;
+}
+.print-header h1 {
+    color: var(--color-primary);
+    font-size: 20px;
+}
+.print-header p {
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+@media print {
+    .print-header { display: block; }
+}
+
+/* ============================================================
+   FORM VALIDATION STYLES
+   ============================================================ */
+.input-error {
+    border-color: var(--color-danger) !important;
+    background: #fff8f8 !important;
+}
+.input-success {
+    border-color: var(--color-accent) !important;
+}
+.field-error-msg {
+    color: var(--color-danger);
+    font-size: var(--text-xs);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ============================================================
+   LOADING STATES
+   ============================================================ */
+.loading-overlay {
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+    border-radius: inherit;
+}
+.loading-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Pulse animation para sa loading indicators */
+.pulse {
+    animation: pulseAnim 1.5s ease-in-out infinite;
+}
+@keyframes pulseAnim {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+}
+
+/* ============================================================
+   RESPONSIVE TABLE WRAPPER
+   ============================================================ */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-lg);
+}
+
+/* ============================================================
+   HEALTH-SPECIFIC STATUS COLORS
+   Para sa mga medical status indicators
+   ============================================================ */
+.status-critical  { color: var(--color-danger);  background: var(--color-danger-pale); }
+.status-moderate  { color: var(--color-warning);  background: var(--color-warning-pale); }
+.status-stable    { color: var(--color-accent);   background: var(--color-accent-pale); }
+.status-recovered { color: var(--color-info);     background: var(--color-info-pale); }
+
+/* Vaccine status indicators */
+.vacc-complete    { color: var(--color-accent);   }
+.vacc-partial     { color: var(--color-warning);  }
+.vacc-not-given   { color: var(--color-danger);   }
+.vacc-scheduled   { color: var(--color-primary);  }
