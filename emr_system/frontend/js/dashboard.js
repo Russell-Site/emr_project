@@ -11,12 +11,25 @@ if (!requireAuth()) {
 /* ---- I-setup ang user info sa UI ---- */
 const currentUser = getCurrentUser();
 
-if (currentUser && currentUser.role === 'admin') {
-    document.body.classList.add('is-admin');
-    console.log('✅ ADMIN CLASS APPLIED');
-} else {
-    document.body.classList.remove('is-admin');
+// Add this to dashboard.js or inside the DOMContentLoaded event
+// Add this to dashboard.js or inside the DOMContentLoaded event
+function updateAdminVisibility() {
+    const user = getCurrentUser();
+    if (user && user.role === 'admin') {
+        document.body.classList.add('is-admin');
+        // Also show any admin-only select elements
+        document.querySelectorAll('.admin-only').forEach(el => {
+            if (el.style) el.style.display = '';
+        });
+    } else {
+        document.body.classList.remove('is-admin');
+    }
 }
+
+// Call this after getCurrentUser() in your dashboard initialization
+
+// Call this after getCurrentUser() in your dashboard initialization
+
 // I-update ang sidebar user info
 document.getElementById('userNameSidebar').textContent = currentUser.name || '—';
 document.getElementById('userRoleSidebar').textContent =
@@ -34,7 +47,6 @@ if (isAdmin()) {
         el.style.display = '';
     });
 }
-
 
 /* ---- I-update ang datetime display ---- */
 function updateDateTime() {
@@ -57,15 +69,15 @@ setInterval(updateDateTime, 60000); // Update bawat minuto
    ============================================================ */
 
 const pageTitles = {
-    'dashboard':       'Dashboard',
-    'patients':        'Patient Records',
-    'medical-records': 'Medical Records',
-    'immunizations':   'Immunizations',
-    'disease-cases':   'Disease Surveillance',
-    'analytics':       'Disease Trend Analytics',
-    'bhw-management':  'BHW Management',
-    'reports':         'Reports & Export',
-    'audit-logs':      'Audit Logs'
+    'dashboard':       '🏠 Dashboard',
+    'patients':        '👥 Patient Records',
+    'medical-records': '📋 Medical Records',
+    'immunizations':   '💉 Immunizations',
+    'disease-cases':   '🦠 Disease Surveillance',
+    'analytics':       '📊 Disease Trend Analytics',
+    'bhw-management':  '👤 BHW Management',
+    'reports':         '📄 Reports & Export',
+    'audit-logs':      '🔍 Audit Logs'
 };
 
 /**
@@ -117,14 +129,15 @@ let survChartInst = null;
  * - Recent auto-recorded entries log
  */
 async function loadSurveillance() {
-    const year      = parseInt(document.getElementById('surv-year')?.value    || new Date().getFullYear());
-    const barangay  = document.getElementById('surv-barangay')?.value || '';
-
+    const year = parseInt(document.getElementById('surv-year')?.value || new Date().getFullYear());
+    // I-set sa barangay_id = 1 (Viente Reales) instead of empty string
+    const barangay = '1'; // Fixed to Viente Reales
+    
     // I-populate ang barangay filter kung admin
     if (isAdmin() && document.getElementById('surv-barangay')) {
         await loadBarangaysForSelect('surv-barangay');
     }
-
+    
     await Promise.all([
         loadSurveillanceTable(year, barangay),
         loadSurveillanceTrend(year, barangay),
@@ -311,17 +324,17 @@ async function loadDashboardStats() {
         // Kunin ang summary stats mula sa analytics endpoint
         const stats = await apiGet('/api/analytics/dashboard-summary');
         if (!stats) return;
-
-        // I-update ang stat cards
-        animateCount('statPatients',       stats.total_patients);
-        animateCount('statRecords',        stats.total_medical_records);
-        animateCount('statImmunizations',  stats.total_immunizations);
-        animateCount('statCases',          stats.cases_this_month);
-
+        
+        // I-update ang stat cards (no changes here)
+        animateCount('statPatients', stats.total_patients);
+        animateCount('statRecords', stats.total_medical_records);
+        animateCount('statImmunizations', stats.total_immunizations);
+        animateCount('statCases', stats.cases_this_month);
+        
         // I-update ang month label
         const monthLabel = document.getElementById('dashMonthLabel');
         if (monthLabel) monthLabel.textContent = `📅 ${stats.current_month}`;
-
+        
         // Kung Admin, i-load din ang BHW stats
         if (isAdmin()) {
             const userStats = await apiGet('/api/users/stats/summary');
@@ -329,19 +342,172 @@ async function loadDashboardStats() {
                 animateCount('statBHW', userStats.active_bhw);
             }
         }
-
-        // I-load ang mga charts
-        await loadTrendChart();
-        await loadTopDiseasesChart();
-        await loadBarangayChart();
+        
+        // I-load ang pregnancy stats (Item 3)
+        try {
+            const pregStats = await apiGet('/api/analytics/pregnancy-stats');
+            if (pregStats) {
+                animateCount('statPregnant', pregStats.total_pregnant);
+                const pregCard = document.getElementById('statPregnant')?.closest('.stat-card');
+                if (pregCard) {
+                    pregCard.style.setProperty('--after-bg', '#e91e63');
+                }
+            }
+        } catch (e) {
+            document.getElementById('statPregnant').textContent = '0';
+        }
+        
+        // I-load ang mga charts na may barangay filter = 1
+        await loadTrendChartWithBarangay(1);
+        await loadTopDiseasesChartWithBarangay(1);
+        await loadBarangayChartWithBarangay(1);
         await loadAgeChart();
-
+        
     } catch (error) {
         console.error('Error loading dashboard stats:', error);
-        showToast('Error loading dashboard data.', 'error');
+        ('Error loading dashboard data.', 'errorshowToast');
     }
 }
 
+/**
+ * I-load ang trend chart na may specific na barangay
+ */
+async function loadTrendChartWithBarangay(barangayId) {
+    const year = parseInt(document.getElementById('trendYearFilter')?.value || new Date().getFullYear());
+    const data = await apiGet(`/api/analytics/disease-trends?year=${year}&barangay_id=${barangayId}`);
+    if (!data) return;
+    
+    const ctx = document.getElementById('trendChart');
+    if (!ctx) return;
+    
+    if (trendChartInst) trendChartInst.destroy();
+    
+    trendChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: data.datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 11 }, padding: 10 }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10,30,50,0.9)',
+                    titleFont: { size: 12 },
+                    bodyFont: { size: 11 }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 10 } }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    ticks: { font: { size: 10 }, stepSize: 1 }
+                }
+            }
+        }
+    });
+}
+
+/**
+ * I-load ang top diseases chart na may specific na barangay
+ */
+async function loadTopDiseasesChartWithBarangay(barangayId) {
+    const data = await apiGet(`/api/analytics/top-diseases?limit=6&barangay_id=${barangayId}`);
+    if (!data || !data.labels.length) return;
+    
+    const ctx = document.getElementById('topDiseasesChart');
+    if (!ctx) return;
+    
+    if (topDiseasesInst) topDiseasesInst.destroy();
+    
+    topDiseasesInst = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.data,
+                backgroundColor: data.backgroundColor,
+                borderWidth: 2,
+                borderColor: '#fff',
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { boxWidth: 12, font: { size: 11 }, padding: 8 }
+                }
+            }
+        }
+    });
+}
+
+/**
+ * I-load ang barangay chart - pero dahil isang barangay lang, mag-show ng details view
+ */
+async function loadBarangayChartWithBarangay(barangayId) {
+    const year = new Date().getFullYear();
+    // I-fetch ang data for specific barangay
+    const data = await apiGet(`/api/analytics/top-diseases?limit=6&year=${year}&barangay_id=${barangayId}`);
+    if (!data || !data.labels.length) return;
+    
+    const ctx = document.getElementById('barangayChart');
+    if (!ctx) return;
+    
+    if (barangayChartInst) barangayChartInst.destroy();
+    
+    // I-change sa bar chart showing disease distribution for Viente Reales
+    barangayChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Cases in Viente Reales',
+                data: data.data,
+                backgroundColor: '#0a4f76',
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.raw} case${context.raw !== 1 ? 's' : ''}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 10 } }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    ticks: { font: { size: 10 } }
+                }
+            }
+        }
+    });
+}
 /**
  * Number counter animation para sa stat cards.
  * Nagbibigay ng animated na pagbabago ng numero.
@@ -460,6 +626,7 @@ async function loadTopDiseasesChart() {
 
 /**
  * I-load ang cases per barangay bar chart.
+ * Item 2: May hover tooltip na nagpapakita ng Top 3 diseases per barangay.
  */
 async function loadBarangayChart() {
     const year = new Date().getFullYear();
@@ -471,6 +638,35 @@ async function loadBarangayChart() {
 
     if (barangayChartInst) barangayChartInst.destroy();
 
+    // Pre-fetch top diseases per barangay for hover tooltips
+    // Ginagawa ito bago gumawa ng chart para available agad ang data
+    const barangayTopDiseases = {};
+    try {
+        // I-fetch ang top 3 diseases per barangay
+        for (let i = 0; i < data.labels.length; i++) {
+            const barangayName = data.labels[i];
+            // Hanapin ang barangay_id mula sa barangay name
+            const allBarangays = await apiGet('/api/disease-cases/barangays');
+            if (allBarangays) {
+                const match = allBarangays.find(b =>
+                    b.barangay_name === barangayName
+                );
+                if (match) {
+                    const top = await apiGet(
+                        `/api/analytics/top-diseases?limit=3&year=${year}&barangay_id=${match.barangay_id}`
+                    );
+                    if (top && top.labels.length) {
+                        barangayTopDiseases[barangayName] = top.labels.map(
+                            (label, idx) => ({ disease: label, cases: top.data[idx] })
+                        );
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Could not pre-fetch barangay disease details:', e);
+    }
+
     barangayChartInst = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -480,15 +676,47 @@ async function loadBarangayChart() {
                 data:            data.data,
                 backgroundColor: data.backgroundColor,
                 borderRadius:    6,
-                borderSkipped:   false
+                borderSkipped:   false,
+                hoverBackgroundColor: data.backgroundColor.map(c => c + 'dd')
             }]
         },
         options: {
-            responsive: true,
+            responsive:          true,
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { backgroundColor: 'rgba(10,30,50,0.9)' }
+                tooltip: {
+                    backgroundColor: 'rgba(10, 25, 47, 0.95)',
+                    padding:          14,
+                    cornerRadius:     10,
+                    titleFont:        { size: 13, weight: 'bold', family: 'Sora' },
+                    bodyFont:         { size: 12, family: 'DM Sans' },
+                    borderColor:      'rgba(255,255,255,0.1)',
+                    borderWidth:      1,
+                    callbacks: {
+                        title: (items) => {
+                            // Ipakita ang barangay name at total
+                            return items[0].label;
+                        },
+                        label: (item) => {
+                            return `  Total: ${item.raw} case${item.raw !== 1 ? 's' : ''}`;
+                        },
+                        afterBody: (items) => {
+                            // Idagdag ang top 3 diseases para sa hover barangay
+                            const barangayName = items[0].label;
+                            const topDiseases  = barangayTopDiseases[barangayName];
+                            if (!topDiseases || !topDiseases.length) {
+                                return ['', '  No disease breakdown available.'];
+                            }
+                            const lines = ['', '  Top Diseases:'];
+                            topDiseases.forEach((d, i) => {
+                                const rank = ['1st', '2nd', '3rd'][i] || `${i+1}th`;
+                                lines.push(`  ${rank}  ${d.disease} — ${d.cases} case${d.cases !== 1 ? 's' : ''}`);
+                            });
+                            return lines;
+                        }
+                    }
+                }
             },
             scales: {
                 x: {
@@ -933,19 +1161,44 @@ async function loadBarangaysForSelect(selectId) {
 
     try {
         const barangays = await apiGet('/api/disease-cases/barangays');
-        if (!barangays) return;
+        if (!barangays || barangays.length === 0) return;
 
-        // I-keep ang unang option (All Barangays)
-        const firstOption = select.options[0];
+        // Hanapin ang Viente Reales (assume barangay_id = 1)
+        const vienteReales = barangays.find(b => b.barangay_id === 1);
+        
+        // I-clear ang select
         select.innerHTML = '';
-        select.appendChild(firstOption);
-
-        barangays.forEach(b => {
+        
+        if (vienteReales) {
+            // Idagdag lang ang Viente Reales bilang default
             const option = document.createElement('option');
-            option.value = b.barangay_id;
-            option.textContent = b.barangay_name;
+            option.value = vienteReales.barangay_id;
+            option.textContent = vienteReales.barangay_name;
+            option.selected = true;
             select.appendChild(option);
-        });
+        } else if (barangays.length > 0) {
+            // Fallback: gamitin ang unang barangay kung walang ID 1
+            const option = document.createElement('option');
+            option.value = barangays[0].barangay_id;
+            option.textContent = barangays[0].barangay_name;
+            option.selected = true;
+            select.appendChild(option);
+        }
+        
+        // Disable ang select para hindi na pwedeng palitan
+        select.disabled = true;
+        
+        // I-add ang hidden attribute para hindi na visible ang "All Barangays" option
+        const style = document.createElement('style');
+        style.textContent = `
+            select#${selectId} {
+                background-color: #f0f0f0;
+                cursor: not-allowed;
+                opacity: 0.8;
+            }
+        `;
+        document.head.appendChild(style);
+        
     } catch (error) {
         console.error('Error loading barangays:', error);
     }

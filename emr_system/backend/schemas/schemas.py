@@ -144,6 +144,16 @@ class PatientCreate(BaseModel):
     contact_number: Optional[str]  = Field(None, max_length=20)
     philhealth_no:  Optional[str]  = Field(None, max_length=30)
 
+    occupation:       Optional[str]  = Field(None, max_length=150)
+    mother_name:      Optional[str]  = Field(None, max_length=150)
+    father_name:      Optional[str]  = Field(None, max_length=150)
+    guardian_contact: Optional[str]  = Field(None, max_length=20)
+    # Pregnancy fields
+    is_pregnant:      Optional[bool] = False
+    gravida:          Optional[int]  = Field(None, ge=0)
+    para:             Optional[int]  = Field(None, ge=0)
+    last_delivery_date: Optional[date] = None
+
     @validator("contact_number")
     def validate_contact(cls, v):
         """Basic validation ng contact number."""
@@ -208,7 +218,10 @@ class MedicalRecordCreate(BaseModel):
     temperature:     Optional[float]        = Field(None, ge=30.0, le=45.0)
     weight_kg:       Optional[float]        = Field(None, ge=0.5, le=500.0)
     height_cm:       Optional[float]        = Field(None, ge=30.0, le=300.0)
-    notes:           Optional[str]          = None
+    heart_rate:       Optional[int]          = Field(None, ge=30, le=300)
+    respiratory_rate: Optional[int]          = Field(None, ge=5,  le=80)
+    lmp:              Optional[date]         = None   # Female patients only
+    notes:            Optional[str]          = None
 
     class Config:
         extra = "forbid"
@@ -317,6 +330,91 @@ class AuditLogResponse(BaseModel):
     table_name: Optional[str]
     ip_address: Optional[str]
     date_time:  datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================
+# HEALTH PROBLEMS SCHEMAS — Item 6
+# ============================================================
+class HealthProblemUpsert(BaseModel):
+    """Schema para sa pag-create o pag-update ng health problems."""
+    allergies:        Optional[str] = None
+    has_asthma:       bool          = False
+    chronic_diseases: Optional[str] = None
+    other_concerns:   Optional[str] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class HealthProblemResponse(BaseModel):
+    problem_id:       int
+    patient_id:       int
+    allergies:        Optional[str]
+    has_asthma:       bool
+    chronic_diseases: Optional[str]
+    other_concerns:   Optional[str]
+    updated_at:       Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================
+# ITR SCHEMAS — Item 4
+# ============================================================
+class ITRCreate(BaseModel):
+    """Schema para sa paglikha ng bagong ITR record."""
+    patient_id:       int            = Field(..., gt=0)
+    date_of_visit:    date
+    # Health snapshot
+    allergies:        Optional[str]  = None
+    has_asthma:       bool           = False
+    chronic_diseases: Optional[str]  = None
+    # Vitals
+    weight_kg:        Optional[float] = Field(None, ge=0.5, le=500)
+    height_cm:        Optional[float] = Field(None, ge=30,  le=300)
+    blood_pressure:   Optional[str]  = Field(None, max_length=20)
+    temperature:      Optional[float] = Field(None, ge=30.0, le=45.0)
+    heart_rate:       Optional[int]  = Field(None, ge=30,   le=300)
+    respiratory_rate: Optional[int]  = Field(None, ge=5,    le=80)
+    lmp:              Optional[date] = None
+    # Treatment
+    chief_complaint:  Optional[str]  = Field(None, max_length=500)
+    diagnosis:        Optional[str]  = None
+    treatment:        Optional[str]  = None
+    medication:       Optional[str]  = None
+    follow_up_date:   Optional[date] = None
+    remarks:          Optional[str]  = None
+
+    class Config:
+        extra = "forbid"
+
+
+class ITRResponse(BaseModel):
+    itr_id:           int
+    patient_id:       int
+    date_of_visit:    date
+    allergies:        Optional[str]
+    has_asthma:       bool
+    chronic_diseases: Optional[str]
+    weight_kg:        Optional[float]
+    height_cm:        Optional[float]
+    blood_pressure:   Optional[str]
+    temperature:      Optional[float]
+    heart_rate:       Optional[int]
+    respiratory_rate: Optional[int]
+    lmp:              Optional[date]
+    chief_complaint:  Optional[str]
+    diagnosis:        Optional[str]
+    treatment:        Optional[str]
+    medication:       Optional[str]
+    follow_up_date:   Optional[date]
+    remarks:          Optional[str]
+    encoder_name:     Optional[str]
+    created_at:       datetime
 
     class Config:
         from_attributes = True

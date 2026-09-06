@@ -24,8 +24,8 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 from database import get_db
-from models.models import Patient, MedicalRecord, Immunization, DiseaseCase, Disease, Barangay
-from middleware.auth import require_admin, get_current_user, log_audit
+from models.models import Patient, MedicalRecord, Immunization, DiseaseCase, Disease
+from middleware.auth import require_admin, get_current_user
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -146,7 +146,6 @@ def create_summary_table(data: list, style_color=PRIMARY_COLOR) -> Table:
 async def generate_patient_report(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin),  # Admin only
-    barangay_id:  Optional[int]  = Query(None),
     date_from:    Optional[date] = Query(None),
     date_to:      Optional[date] = Query(None)
 ):
@@ -155,18 +154,17 @@ async def generate_patient_report(
     Admin only. May options para sa filter ng barangay at petsa.
     """
     # Kuhanin ang patient data
-    query = db.query(Patient, Barangay.barangay_name).join(
-        Barangay, Patient.barangay_id == Barangay.barangay_id
-    ).filter(Patient.is_archived == False)
+    from database import get_barangay_name
+    barangay_name = get_barangay_name()
 
-    if barangay_id:
-        query = query.filter(Patient.barangay_id == barangay_id)
+    query = db.query(Patient).filter(Patient.is_archived == False)
+
     if date_from:
         query = query.filter(Patient.created_at >= date_from)
     if date_to:
         query = query.filter(Patient.created_at <= date_to)
 
-    results = query.order_by(Barangay.barangay_name, Patient.last_name).all()
+    results = query.order_by(Patient.last_name).all()
 
     if not results:
         raise HTTPException(status_code=404, detail="No patient records found.")
@@ -186,7 +184,7 @@ async def generate_patient_report(
     styles = getSampleStyleSheet()
 
     # Header
-    subtitle = f"Barangay: {results[0].barangay_name}" if barangay_id else "All Barangays"
+    subtitle = barangay_name
     date_range = ""
     if date_from or date_to:
         date_range = f"Period: {date_from or 'Start'} to {date_to or 'Present'}"
@@ -220,10 +218,10 @@ async def generate_patient_report(
     elements.append(Spacer(1, 0.3 * inch))
 
     # Patient table
-    headers = ['#', 'Last Name', 'First Name', 'Birthdate', 'Age', 'Sex', 'Barangay', 'Contact #', 'Address']
+    headers = ['#', 'Last Name', 'First Name', 'Birthdate', 'Age', 'Sex', 'Contact #', 'PhilHealth', 'Address']
     table_data = [headers]
 
-    for idx, (patient, barangay_name) in enumerate(results, 1):
+    for idx, patient in enumerate(results, 1):
         today = date.today()
         age   = today.year - patient.birthdate.year
         if (today.month, today.day) < (patient.birthdate.month, patient.birthdate.day):
@@ -236,8 +234,8 @@ async def generate_patient_report(
             patient.birthdate.strftime("%m/%d/%Y"),
             str(age),
             patient.sex,
-            barangay_name,
             patient.contact_number or "N/A",
+            patient.philhealth_no  or "N/A",
             patient.address[:40] + "..." if len(patient.address) > 40 else patient.address
         ])
 
@@ -251,8 +249,7 @@ async def generate_patient_report(
     doc.build(elements)
     buffer.seek(0)
 
-    # I-log ang report generation
-    log_audit(db, current_user.user_id, f"GENERATED PATIENT REPORT ({total} records)")
+    # I-log ang report generation")
 
     return StreamingResponse(
         buffer,
@@ -287,8 +284,6 @@ async def generate_disease_report(
         func.sum(DiseaseCase.number_of_cases).label('total_cases')
     ).join(
         Disease,  DiseaseCase.disease_id == Disease.disease_id
-    ).join(
-        Barangay, DiseaseCase.barangay_id == Barangay.barangay_id
     ).filter(
         extract('year', DiseaseCase.date_recorded) == target_year
     )
@@ -298,9 +293,7 @@ async def generate_disease_report(
 
     results = query.group_by(
         Disease.disease_name, Barangay.barangay_name, DiseaseCase.date_recorded
-    ).order_by(
-        func.sum(DiseaseCase.number_of_cases).desc()
-    ).all()
+    ).order_by(func.sum(DiseaseCase.number_of_cases).desc()).all()
 
     if not results:
         raise HTTPException(status_code=404, detail="No disease data found.")
@@ -317,15 +310,16 @@ async def generate_disease_report(
 
     elements = []
 
+    from database import get_barangay_name
     create_pdf_header(
         elements,
         f"Disease Trend Report - {target_year}",
-        "District 1 Disease Surveillance",
+        get_barangay_name(),
         f"As of {datetime.now().strftime('%B %d, %Y')}"
     )
 
     # Gamitin ang Pandas para sa aggregation
-    df = pd.DataFrame(results, columns=['disease_name', 'barangay_name', 'date_recorded', 'total_cases'])
+    df = pd.DataFrame(results, columns=['disease_name', 'date_recorded', 'total_cases'])
     df['month'] = pd.to_datetime(df['date_recorded']).dt.strftime('%B')
 
     # Summary per disease
@@ -383,8 +377,6 @@ async def generate_disease_report(
     doc.build(elements)
     buffer.seek(0)
 
-    log_audit(db, current_user.user_id, f"GENERATED DISEASE TREND REPORT - {target_year}")
-
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
@@ -401,35 +393,30 @@ async def generate_disease_report(
 async def generate_immunization_report(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin),
-    barangay_id: Optional[int]  = Query(None),
-    date_from:   Optional[date] = Query(None),
-    date_to:     Optional[date] = Query(None)
+    date_from: Optional[date] = Query(None),
+    date_to:   Optional[date] = Query(None)
 ):
     """
     Gumawa ng PDF report ng immunization records.
-    Kasama ang bilang ng bakuna bawat barangay at bawat uri ng bakuna.
+    V2: Walang barangay join — single-barangay database.
     """
+    from database import get_barangay_name
+
     query = db.query(
         Immunization,
         Patient.first_name,
         Patient.last_name,
-        Patient.birthdate,
-        Patient.sex,
-        Barangay.barangay_name
+        Patient.sex
     ).join(
-        Patient,  Immunization.patient_id == Patient.patient_id
-    ).join(
-        Barangay, Patient.barangay_id == Barangay.barangay_id
+        Patient, Immunization.patient_id == Patient.patient_id
     )
 
-    if barangay_id:
-        query = query.filter(Patient.barangay_id == barangay_id)
     if date_from:
         query = query.filter(Immunization.date_given >= date_from)
     if date_to:
         query = query.filter(Immunization.date_given <= date_to)
 
-    results = query.order_by(Barangay.barangay_name, Immunization.date_given.desc()).all()
+    results = query.order_by(Immunization.date_given.desc()).all()
 
     if not results:
         raise HTTPException(status_code=404, detail="No immunization records found.")
@@ -445,15 +432,12 @@ async def generate_immunization_report(
     )
 
     elements = []
+    barangay_name = get_barangay_name()
 
-    subtitle = "All Barangays"
-    if barangay_id and results:
-        subtitle = results[0].barangay_name
+    create_pdf_header(elements, "Immunization Records Report", barangay_name)
 
-    create_pdf_header(elements, "Immunization Records Report", subtitle)
-
-    # Immunization table
-    headers = ['#', 'Patient Name', 'Sex', 'Barangay', 'Vaccine', 'Dose #', 'Date Given', 'Next Schedule', 'Administered By']
+    # Immunization table — walang Barangay column (single-barangay na)
+    headers = ['#', 'Patient Name', 'Sex', 'Vaccine', 'Dose #', 'Date Given', 'Next Schedule', 'Administered By']
     table_data = [headers]
 
     for idx, row in enumerate(results, 1):
@@ -462,7 +446,6 @@ async def generate_immunization_report(
             str(idx),
             f"{row.last_name}, {row.first_name}",
             row.sex,
-            row.barangay_name,
             immun.vaccine_name,
             str(immun.dose_number or 1),
             immun.date_given.strftime("%m/%d/%Y"),
@@ -470,7 +453,7 @@ async def generate_immunization_report(
             immun.administered_by or "N/A"
         ])
 
-    col_widths = [0.3*inch, 1.8*inch, 0.5*inch, 1.2*inch, 1.5*inch, 0.5*inch, 0.9*inch, 1*inch, 1.5*inch]
+    col_widths = [0.3*inch, 2.2*inch, 0.6*inch, 1.8*inch, 0.6*inch, 1*inch, 1.1*inch, 1.8*inch]
     immun_table = create_summary_table(table_data)
     if immun_table:
         immun_table._argW = col_widths
@@ -478,8 +461,6 @@ async def generate_immunization_report(
 
     doc.build(elements)
     buffer.seek(0)
-
-    log_audit(db, current_user.user_id, f"GENERATED IMMUNIZATION REPORT ({len(results)} records)")
 
     return StreamingResponse(
         buffer,

@@ -1,322 +1,261 @@
 # ============================================================
-# routers/analytics.py - Disease Trend Analytics Routes
-# Gumagamit ng Pandas para sa data processing at aggregation
-# Para sa Chart.js visualization sa frontend
+# routers/analytics.py — Disease Trend Analytics
+# Single-barangay — no barangay FK or dropdown needed
+# All data is from the current database instance
 # ============================================================
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
-from typing import List, Optional
-from datetime import date, datetime
+from typing import Optional
+from datetime import datetime
 import pandas as pd
 
-from database import get_db
-from models.models import DiseaseCase, Disease, Barangay, Patient, MedicalRecord, Immunization, User
+from database import get_db, get_barangay_name
+from models.models import DiseaseCase, Disease, Patient, MedicalRecord, Immunization, User
 from middleware.auth import get_current_user
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
-
-@router.get("/disease-trends")
-async def get_disease_trends(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    year:        Optional[int]  = Query(None, description="Taon ng datos (default: kasalukuyang taon)"),
-    barangay_id: Optional[int]  = Query(None, description="Filter sa specific na barangay"),
-    disease_id:  Optional[int]  = Query(None, description="Filter sa specific na sakit")
-):
-    """
-    Kunin ang disease trend data para sa Chart.js.
-    Ibinabalik ang monthly na bilang ng kaso bawat sakit at barangay.
-    Ginagamit ang Pandas para sa data manipulation.
-    """
-    # Default sa kasalukuyang taon kung walang naibigay
-    target_year = year or datetime.now().year
-
-    # Kuhanin ang data mula sa database gamit ang ORM
-    query = db.query(
-        DiseaseCase.date_recorded,
-        DiseaseCase.number_of_cases,
-        DiseaseCase.barangay_id,
-        Disease.disease_name,
-        Barangay.barangay_name
-    ).join(
-        Disease, DiseaseCase.disease_id == Disease.disease_id
-    ).join(
-        Barangay, DiseaseCase.barangay_id == Barangay.barangay_id
-    ).filter(
-        extract('year', DiseaseCase.date_recorded) == target_year
-    )
-
-    # I-apply ang mga optional na filters
-    if current_user.role == "bhw":
-        # BHW: makikita lamang ang kanilang barangay
-        query = query.filter(DiseaseCase.barangay_id == current_user.barangay_id)
-    elif barangay_id:
-        query = query.filter(DiseaseCase.barangay_id == barangay_id)
-
-    if disease_id:
-        query = query.filter(DiseaseCase.disease_id == disease_id)
-
-    # I-execute ang query at i-convert sa list of dicts
-    results = query.all()
-
-    if not results:
-        return {
-            "labels": [],
-            "datasets": [],
-            "message": "No data available for the selected filters."
-        }
-
-    # Gamitin ang Pandas para sa data processing
-    df = pd.DataFrame(results, columns=[
-        'date_recorded', 'number_of_cases', 'barangay_id', 'disease_name', 'barangay_name'
-    ])
-
-    # Dagdagan ng month column
-    df['month'] = pd.to_datetime(df['date_recorded']).dt.month
-    df['month_name'] = pd.to_datetime(df['date_recorded']).dt.strftime('%B')
-
-    # Gawing buwan-buwan na aggregation
-    monthly_data = df.groupby(['month', 'month_name', 'disease_name'])['number_of_cases'].sum().reset_index()
-    monthly_data = monthly_data.sort_values('month')
-
-    # I-format para sa Chart.js
-    months = ['January', 'February', 'March', 'April', 'May', 'June',
-              'July', 'August', 'September', 'October', 'November', 'December']
-
-    diseases = monthly_data['disease_name'].unique().tolist()
-
-    # Color palette para sa mga chart lines
-    colors = [
-        '#0a4f76', '#1a8a5e', '#e74c3c', '#f39c12', '#9b59b6',
-        '#1abc9c', '#e67e22', '#3498db', '#2ecc71', '#e91e63',
-        '#ff5722', '#607d8b'
-    ]
-
-    datasets = []
-    for idx, disease in enumerate(diseases):
-        disease_data = monthly_data[monthly_data['disease_name'] == disease]
-        monthly_cases = []
-
-        for month_num in range(1, 13):
-            month_row = disease_data[disease_data['month'] == month_num]
-            cases = int(month_row['number_of_cases'].sum()) if not month_row.empty else 0
-            monthly_cases.append(cases)
-
-        color = colors[idx % len(colors)]
-        datasets.append({
-            "label": disease,
-            "data": monthly_cases,
-            "borderColor": color,
-            "backgroundColor": f"{color}20",  # 20 = 12% opacity sa hex
-            "tension": 0.4,
-            "fill": True,
-            "pointRadius": 4,
-            "pointHoverRadius": 6
-        })
-
-    return {
-        "labels": months,
-        "datasets": datasets,
-        "year": target_year
-    }
-
-
-@router.get("/disease-per-barangay")
-async def get_disease_per_barangay(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    year:       Optional[int] = Query(None),
-    disease_id: Optional[int] = Query(None)
-):
-    """
-    Kunin ang bilang ng kaso bawat barangay.
-    Para sa bar chart na nagpapakita ng comparison ng mga barangay.
-    """
-    target_year = year or datetime.now().year
-
-    # Query para sa per-barangay disease cases
-    query = db.query(
-        Barangay.barangay_name,
-        func.sum(DiseaseCase.number_of_cases).label('total_cases')
-    ).join(
-        DiseaseCase, Barangay.barangay_id == DiseaseCase.barangay_id
-    ).filter(
-        extract('year', DiseaseCase.date_recorded) == target_year
-    )
-
-    if disease_id:
-        query = query.filter(DiseaseCase.disease_id == disease_id)
-
-    if current_user.role == "bhw":
-        query = query.filter(DiseaseCase.barangay_id == current_user.barangay_id)
-
-    results = query.group_by(Barangay.barangay_name).order_by(
-        func.sum(DiseaseCase.number_of_cases).desc()
-    ).all()
-
-    return {
-        "labels": [r.barangay_name for r in results],
-        "data": [int(r.total_cases) for r in results],
-        "backgroundColor": [
-            '#0a4f76', '#1a8a5e', '#e74c3c', '#f39c12', '#9b59b6',
-            '#1abc9c', '#e67e22', '#3498db', '#2ecc71', '#e91e63',
-            '#ff5722', '#607d8b', '#795548', '#00bcd4', '#8bc34a'
-        ][:len(results)]
-    }
-
-
-@router.get("/top-diseases")
-async def get_top_diseases(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    year:        Optional[int] = Query(None),
-    barangay_id: Optional[int] = Query(None),
-    limit:       int           = Query(5, ge=1, le=15)
-):
-    """
-    Kunin ang top N na pinaka-maraming kaso na sakit.
-    Para sa pie/doughnut chart.
-    """
-    target_year = year or datetime.now().year
-
-    query = db.query(
-        Disease.disease_name,
-        func.sum(DiseaseCase.number_of_cases).label('total_cases')
-    ).join(
-        DiseaseCase, Disease.disease_id == DiseaseCase.disease_id
-    ).filter(
-        extract('year', DiseaseCase.date_recorded) == target_year
-    )
-
-    if current_user.role == "bhw":
-        query = query.filter(DiseaseCase.barangay_id == current_user.barangay_id)
-    elif barangay_id:
-        query = query.filter(DiseaseCase.barangay_id == barangay_id)
-
-    results = query.group_by(Disease.disease_name).order_by(
-        func.sum(DiseaseCase.number_of_cases).desc()
-    ).limit(limit).all()
-
-    colors = [
-        '#0a4f76', '#1a8a5e', '#e74c3c', '#f39c12', '#9b59b6',
-        '#1abc9c', '#e67e22', '#3498db', '#2ecc71', '#e91e63',
-        '#ff5722', '#607d8b', '#795548', '#00bcd4', '#8bc34a'
-    ]
-
-    return {
-        "labels": [r.disease_name for r in results],
-        "data": [int(r.total_cases) for r in results],
-        "backgroundColor": colors[:len(results)]
-    }
-
-
-@router.get("/age-distribution")
-async def get_age_distribution(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    barangay_id: Optional[int] = Query(None)
-):
-    """
-    Kunin ang distribusyon ng edad ng mga pasyente.
-    Para sa bar chart na nagpapakita ng age groups.
-    """
-    # Kuhanin ang lahat ng birthdate
-    query = db.query(Patient.birthdate, Patient.sex).filter(Patient.is_archived == False)
-
-    if current_user.role == "bhw":
-        query = query.filter(Patient.barangay_id == current_user.barangay_id)
-    elif barangay_id:
-        query = query.filter(Patient.barangay_id == barangay_id)
-
-    results = query.all()
-
-    if not results:
-        return {"labels": [], "male": [], "female": []}
-
-    # Gamitin ang Pandas para sa age group computation
-    df = pd.DataFrame(results, columns=['birthdate', 'sex'])
-    today = pd.Timestamp.now()
-    df['age'] = (today - pd.to_datetime(df['birthdate'])).dt.days // 365
-
-    # Gumawa ng age group bins
-    bins   = [0, 5, 12, 17, 35, 59, 150]
-    labels = ['0-4 yrs', '5-12 yrs', '13-17 yrs', '18-35 yrs', '36-59 yrs', '60+ yrs']
-    df['age_group'] = pd.cut(df['age'], bins=bins, labels=labels, right=True)
-
-    # Separate counts para sa Male at Female
-    male_counts   = df[df['sex'] == 'Male'].groupby('age_group', observed=True).size()
-    female_counts = df[df['sex'] == 'Female'].groupby('age_group', observed=True).size()
-
-    return {
-        "labels":  labels,
-        "male":    [int(male_counts.get(lbl, 0)) for lbl in labels],
-        "female":  [int(female_counts.get(lbl, 0)) for lbl in labels]
-    }
+# Color palette for charts
+COLORS = [
+    '#0b1f4b','#1a6fad','#1a8a5e','#e74c3c','#f39c12',
+    '#8e44ad','#1abc9c','#e67e22','#3498db','#2ecc71',
+    '#e91e63','#ff5722','#607d8b','#795548','#00bcd4'
+]
 
 
 @router.get("/dashboard-summary")
-async def get_dashboard_summary(
+async def dashboard_summary(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """
-    Kunin ang lahat ng summary numbers para sa Admin/BHW Dashboard.
-    Isang API call lang para sa lahat ng dashboard stats.
+    Lahat ng summary numbers para sa dashboard.
+    Isang API call lang — para sa stat cards.
     """
-    # I-filter depende sa role ng user
-    patient_query = db.query(Patient).filter(Patient.is_archived == False)
-    record_query  = db.query(MedicalRecord)
-    immun_query   = db.query(Immunization)
-    case_query    = db.query(DiseaseCase)
+    now           = datetime.now()
+    total_patients = db.query(Patient).filter(Patient.is_archived == False).count()
+    total_records  = db.query(MedicalRecord).count()
+    total_immun    = db.query(Immunization).count()
+    total_female   = db.query(Patient).filter(
+        Patient.is_archived == False, Patient.sex == "Female"
+    ).count()
 
-    if current_user.role == "bhw":
-        bid = current_user.barangay_id
-        patient_query = patient_query.filter(Patient.barangay_id == bid)
+    # Cases this month
+    cases_month = db.query(func.sum(DiseaseCase.number_of_cases)).filter(
+        extract('month', DiseaseCase.date_recorded) == now.month,
+        extract('year',  DiseaseCase.date_recorded) == now.year
+    ).scalar() or 0
 
-        # Para sa medical records, kailangan i-join sa patient
-        patient_ids = [p.patient_id for p in patient_query.all()]
-        record_query = record_query.filter(MedicalRecord.patient_id.in_(patient_ids))
-        immun_query  = immun_query.filter(Immunization.patient_id.in_(patient_ids))
-        case_query   = case_query.filter(DiseaseCase.barangay_id == bid)
-
-    # Kunin ang current month data
-    current_month = datetime.now().month
-    current_year  = datetime.now().year
-
-    total_patients     = patient_query.count()
-    total_records      = record_query.count()
-    total_immunizations = immun_query.count()
-    total_cases_this_month = case_query.filter(
-        extract('month', DiseaseCase.date_recorded) == current_month,
-        extract('year',  DiseaseCase.date_recorded) == current_year
-    ).with_entities(func.sum(DiseaseCase.number_of_cases)).scalar() or 0
-
-    # Kunin ang pinaka-maraming kaso na sakit ngayong buwan
-    top_disease_query = db.query(
+    # Top disease this month
+    top = db.query(
         Disease.disease_name,
         func.sum(DiseaseCase.number_of_cases).label('total')
     ).join(DiseaseCase).filter(
-        extract('month', DiseaseCase.date_recorded) == current_month,
-        extract('year',  DiseaseCase.date_recorded) == current_year
-    )
-
-    if current_user.role == "bhw":
-        top_disease_query = top_disease_query.filter(
-            DiseaseCase.barangay_id == current_user.barangay_id
-        )
-
-    top_disease = top_disease_query.group_by(Disease.disease_name).order_by(
+        extract('month', DiseaseCase.date_recorded) == now.month,
+        extract('year',  DiseaseCase.date_recorded) == now.year
+    ).group_by(Disease.disease_name).order_by(
         func.sum(DiseaseCase.number_of_cases).desc()
     ).first()
 
+    # BHW stats (admin only)
+    total_bhw  = db.query(User).filter(User.role == "bhw").count()
+    active_bhw = db.query(User).filter(User.role == "bhw", User.status == "active").count()
+
     return {
-        "total_patients":          total_patients,
-        "total_medical_records":   total_records,
-        "total_immunizations":     total_immunizations,
-        "cases_this_month":        int(total_cases_this_month),
-        "top_disease_this_month":  top_disease.disease_name if top_disease else "N/A",
-        "current_month":           datetime.now().strftime("%B %Y")
+        "barangay_name":         get_barangay_name(),
+        "total_patients":        total_patients,
+        "total_medical_records": total_records,
+        "total_immunizations":   total_immun,
+        "total_female_patients": total_female,
+        "cases_this_month":      int(cases_month),
+        "top_disease_this_month":top.disease_name if top else "N/A",
+        "total_bhw":             total_bhw,
+        "active_bhw":            active_bhw,
+        "current_month":         now.strftime("%B %Y")
+    }
+
+
+@router.get("/disease-trends")
+async def disease_trends(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    year: Optional[int] = Query(None)
+):
+    """
+    Monthly disease trend data para sa Chart.js line chart.
+    Ibinabalik ang isang dataset per disease, 12 months.
+    Ang labels ay nakasulat na sa chart mismo (datalabels plugin).
+    """
+    target_year = year or datetime.now().year
+
+    rows = db.query(
+        DiseaseCase.date_recorded,
+        DiseaseCase.number_of_cases,
+        Disease.disease_name
+    ).join(Disease).filter(
+        extract('year', DiseaseCase.date_recorded) == target_year
+    ).all()
+
+    if not rows:
+        return {"labels": [], "datasets": [], "year": target_year}
+
+    df = pd.DataFrame(rows, columns=['date_recorded','number_of_cases','disease_name'])
+    df['month'] = pd.to_datetime(df['date_recorded']).dt.month
+
+    months   = ['Jan','Feb','Mar','Apr','May','Jun',
+                'Jul','Aug','Sep','Oct','Nov','Dec']
+    diseases = df['disease_name'].unique().tolist()
+
+    datasets = []
+    for idx, disease in enumerate(diseases):
+        sub    = df[df['disease_name'] == disease]
+        totals = []
+        for m in range(1, 13):
+            row = sub[sub['month'] == m]
+            totals.append(int(row['number_of_cases'].sum()) if not row.empty else 0)
+
+        color = COLORS[idx % len(COLORS)]
+        datasets.append({
+            "label":            disease,
+            "data":             totals,
+            "borderColor":      color,
+            "backgroundColor":  color + "25",
+            "tension":          0.4,
+            "fill":             True,
+            "pointRadius":      5,
+            "pointHoverRadius": 7,
+            "borderWidth":      2.5
+        })
+
+    return {"labels": months, "datasets": datasets, "year": target_year}
+
+
+@router.get("/top-diseases")
+async def top_diseases(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    year:  Optional[int] = Query(None),
+    limit: int            = Query(8, ge=1, le=15)
+):
+    """
+    Top N diseases by case count para sa doughnut chart.
+    """
+    target_year = year or datetime.now().year
+
+    rows = db.query(
+        Disease.disease_name,
+        func.sum(DiseaseCase.number_of_cases).label('total')
+    ).join(DiseaseCase).filter(
+        extract('year', DiseaseCase.date_recorded) == target_year
+    ).group_by(Disease.disease_name).order_by(
+        func.sum(DiseaseCase.number_of_cases).desc()
+    ).limit(limit).all()
+
+    return {
+        "labels":          [r.disease_name for r in rows],
+        "data":            [int(r.total)   for r in rows],
+        "backgroundColor": COLORS[:len(rows)]
+    }
+
+
+@router.get("/monthly-cases")
+async def monthly_cases(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    year: Optional[int] = Query(None)
+):
+    """
+    Total cases per month para sa bar chart.
+    """
+    target_year = year or datetime.now().year
+
+    rows = db.query(
+        extract('month', DiseaseCase.date_recorded).label('month'),
+        func.sum(DiseaseCase.number_of_cases).label('total')
+    ).filter(
+        extract('year', DiseaseCase.date_recorded) == target_year
+    ).group_by('month').order_by('month').all()
+
+    months_short = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec']
+    totals = [0] * 12
+    for r in rows:
+        totals[int(r.month) - 1] = int(r.total)
+
+    return {
+        "labels":          months_short,
+        "data":            totals,
+        "backgroundColor": [COLORS[0]] * 12
+    }
+
+
+@router.get("/age-distribution")
+async def age_distribution(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Distribusyon ng edad ng mga pasyente para sa bar chart."""
+    rows = db.query(Patient.birthdate, Patient.sex).filter(
+        Patient.is_archived == False
+    ).all()
+
+    if not rows:
+        return {"labels": [], "male": [], "female": []}
+
+    df    = pd.DataFrame(rows, columns=['birthdate','sex'])
+    today = pd.Timestamp.now()
+    df['age'] = (today - pd.to_datetime(df['birthdate'])).dt.days // 365
+
+    bins   = [0, 4, 12, 17, 35, 59, 150]
+    labels = ['0-4','5-12','13-17','18-35','36-59','60+']
+    df['age_group'] = pd.cut(df['age'], bins=bins, labels=labels, right=True)
+
+    male   = df[df['sex']=='Male'].groupby('age_group', observed=True).size()
+    female = df[df['sex']=='Female'].groupby('age_group', observed=True).size()
+
+    return {
+        "labels": labels,
+        "male":   [int(male.get(l, 0))   for l in labels],
+        "female": [int(female.get(l, 0)) for l in labels]
+    }
+
+
+@router.get("/surveillance")
+async def surveillance(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    year: Optional[int] = Query(None)
+):
+    """
+    Disease surveillance table — case counts per disease.
+    Para sa Surveillance section ng dashboard.
+    """
+    target_year = year or datetime.now().year
+
+    rows = db.query(
+        Disease.disease_name,
+        Disease.category,
+        func.sum(DiseaseCase.number_of_cases).label('total')
+    ).join(DiseaseCase).filter(
+        extract('year', DiseaseCase.date_recorded) == target_year
+    ).group_by(Disease.disease_name, Disease.category).order_by(
+        func.sum(DiseaseCase.number_of_cases).desc()
+    ).all()
+
+    grand_total = sum(r.total for r in rows) if rows else 0
+
+    return {
+        "year":        target_year,
+        "grand_total": int(grand_total),
+        "diseases": [
+            {
+                "disease_name": r.disease_name,
+                "category":     r.category,
+                "total":        int(r.total),
+                "pct":          round(r.total / grand_total * 100, 1) if grand_total else 0
+            }
+            for r in rows
+        ]
     }

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import os
 
 from database import get_db
-from models.models import User, AuditLog, UserSession
+from models.models import User
 from utils.security import decode_access_token
 
 # HTTP Bearer token scheme para sa JWT
@@ -43,7 +43,7 @@ def get_current_user(
         )
 
     # Kunin ang user_id mula sa token payload
-    user_id: int = payload.get("user_id")
+    user_id = payload.get("user_id")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -97,18 +97,6 @@ def require_bhw_or_admin(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 
-def check_barangay_access(
-    barangay_id: int,
-    current_user: User = Depends(get_current_user)
-) -> bool:
-    """
-    Suriin kung may access ang BHW sa specific na barangay.
-    Ang Admin ay may access sa lahat ng barangay.
-    Ang BHW ay puwede lamang mag-access ng kanilang assigned na barangay.
-    """
-    # Admin ay may full access
-    if current_user.role == "admin":
-        return True
 
     # BHW ay puwede lamang sa kanilang barangay
     if current_user.barangay_id == barangay_id:
@@ -122,34 +110,25 @@ def check_barangay_access(
 
 def log_audit(
     db: Session,
-    user_id: int | None,
+    user_id,
     action: str,
-    table_name: str | None = None,
-    record_id: int | None = None,
-    ip_address: str | None = None,
-    user_agent: str | None = None
+    ip_address: str = None,
+    user_agent: str = None,
+    # Keep old params for backward compat but ignore them
+    table_name: str = None,
+    record_id: int = None
 ):
     """
-    I-record ang lahat ng aksyon sa audit log.
-    Tinatawag ito sa bawat importante na operasyon sa sistema.
-    
-    Parameters:
-        db: Database session
-        user_id: ID ng user na gumanap ng aksyon
-        action: Deskripsyon ng aksyon (e.g., "LOGIN", "EDIT PATIENT")
-        table_name: Kung aling table ang na-affect
-        record_id: ID ng na-affect na record
-        ip_address: IP address ng user
-        user_agent: Browser information
+    I-record ang login/logout events sa audit log.
+    V2: Simplified — LOGIN at LOGOUT events lang.
     """
     try:
+        from models.models import AuditLog
         log_entry = AuditLog(
             user_id    = user_id,
             action     = action,
-            table_name = table_name,
-            record_id  = record_id,
             ip_address = ip_address,
-            user_agent = user_agent[:500] if user_agent else None  # Limitahan ang haba
+            user_agent = user_agent[:500] if user_agent else None
         )
         db.add(log_entry)
         db.commit()

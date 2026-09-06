@@ -1,134 +1,124 @@
 # ============================================================
-# main.py - FastAPI Application Entry Point
-# Dito naka-configure ang lahat ng middleware, routes, at security
-# Ito ang pangunahing file na pinapatakbo ng server
+# main.py — FastAPI Application v2
+# - No OTP for BHW registration
+# - No barangay dropdown (single-barangay per instance)
+# - Clean routes: auth, users, patients, analytics, reports
 # ============================================================
 
-import os
-import time
+import os, time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
+from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from dotenv import load_dotenv
 
-# I-load ang environment variables
 load_dotenv()
 
-# I-import ang lahat ng routers
+from database import engine, get_db, test_connection, get_barangay_name, Base
+from models.models import (
+    User, Patient, HealthProblem, Pregnancy,
+    MedicalRecord, Immunization, Disease, DiseaseCase, AuditLog
+)
+from middleware.auth import (
+    get_current_user, require_admin, log_audit, get_client_info
+)
 from routers.auth      import router as auth_router
 from routers.users     import router as users_router
 from routers.patients  import router as patients_router
 from routers.analytics import router as analytics_router
 from routers.reports   import router as reports_router
 
-# I-import ang database at models
-from database import engine, test_connection, Base
-
-# ============================================================
-# RATE LIMITER SETUP
-# Para maiwasan ang brute-force attacks at DDoS
-# ============================================================
-# Gumagamit ng IP address para sa rate limiting
+# ── Rate limiter ──────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
+# ── Inline routers ────────────────────────────────────────────────────────
+from fastapi import APIRouter
+from typing import Optional
 
-# ============================================================
-# ROUTERS PARA SA MEDICAL RECORDS AT IMMUNIZATION
-# (Inline definition para sa brevity - sa production, ilipat sa sariling file)
-# ============================================================
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from database import get_db
-from models.models import MedicalRecord, Immunization, Patient, DiseaseCase, Disease, Barangay
-from schemas.schemas import MedicalRecordCreate, ImmunizationCreate, DiseaseCaseCreate
-from middleware.auth import get_current_user, require_admin, log_audit, get_client_info
-from typing import Optional, List
+# Medical Records
+mr_router = APIRouter(prefix="/api/medical-records", tags=["Medical Records"])
 
-# Medical Records Router
-medical_router = APIRouter(prefix="/api/medical-records", tags=["Medical Records"])
-
-@medical_router.post("/")
+@mr_router.post("/")
 async def create_medical_record(
     request: Request,
-    record_data: MedicalRecordCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Mag-encode ng bagong medical record para sa pasyente."""
-    ip_address, _ = get_client_info(request)
+    """Mag-encode ng bagong medical record. Nag-ti-trigger ng auto disease case counting."""
+    body = await request.json()
+    patient_id = body.get("patient_id")
 
-    # Suriin kung may access ang BHW sa pasyenteng ito
-    patient = db.query(Patient).filter(Patient.patient_id == record_data.patient_id).first()
+    patient = db.query(Patient).filter(
+        Patient.patient_id == patient_id,
+        Patient.is_archived == False
+    ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found.")
 
-    if current_user.role == "bhw" and patient.barangay_id != current_user.barangay_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    new_record = MedicalRecord(
-        patient_id      = record_data.patient_id,
-        visit_date      = record_data.visit_date,
-        chief_complaint = record_data.chief_complaint,
-        symptoms        = record_data.symptoms,
-        diagnosis       = record_data.diagnosis,
-        treatment       = record_data.treatment,
-        blood_pressure  = record_data.blood_pressure,
-        temperature     = record_data.temperature,
-        weight_kg       = record_data.weight_kg,
-        height_cm       = record_data.height_cm,
-        notes           = record_data.notes,
-        user_id         = current_user.user_id
+    rec = MedicalRecord(
+        patient_id       = patient_id,
+        visit_date       = body.get("visit_date"),
+        chief_complaint  = body.get("chief_complaint"),
+        symptoms         = body.get("symptoms"),
+        diagnosis        = body.get("diagnosis"),
+        treatment        = body.get("treatment"),
+        blood_pressure   = body.get("blood_pressure"),
+        temperature      = body.get("temperature"),
+        weight_kg        = body.get("weight_kg"),
+        height_cm        = body.get("height_cm"),
+        heart_rate       = body.get("heart_rate"),
+        respiratory_rate = body.get("respiratory_rate"),
+        lmp              = body.get("lmp") if patient.sex == "Female" else None,
+        notes            = body.get("notes"),
+        user_id          = current_user.user_id
     )
-    db.add(new_record)
+    db.add(rec)
     db.commit()
-    db.refresh(new_record)
+    db.refresh(rec)
 
-    log_audit(db, current_user.user_id, f"ADDED MEDICAL RECORD for Patient ID: {record_data.patient_id}",
-              "medical_records", new_record.record_id, ip_address)
+    # Auto-count disease cases from diagnosis field
+    diagnosis = body.get("diagnosis", "") or ""
+    if diagnosis:
+        _auto_count_cases(db, diagnosis, patient_id, body.get("visit_date"), current_user.user_id)
 
-    return {"message": "Medical record added.", "record_id": new_record.record_id}
+    return {"message": "Medical record saved.", "record_id": rec.record_id}
 
 
-@medical_router.get("/patient/{patient_id}")
+@mr_router.get("/patient/{patient_id}")
 async def get_patient_records(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Kunin ang lahat ng medical records ng isang pasyente."""
-    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found.")
-
-    if current_user.role == "bhw" and patient.barangay_id != current_user.barangay_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
     records = db.query(MedicalRecord).filter(
         MedicalRecord.patient_id == patient_id
     ).order_by(MedicalRecord.visit_date.desc()).all()
 
     return [
         {
-            "record_id":       r.record_id,
-            "visit_date":      r.visit_date,
-            "chief_complaint": r.chief_complaint,
-            "symptoms":        r.symptoms,
-            "diagnosis":       r.diagnosis,
-            "treatment":       r.treatment,
-            "blood_pressure":  r.blood_pressure,
-            "temperature":     float(r.temperature) if r.temperature else None,
-            "weight_kg":       float(r.weight_kg) if r.weight_kg else None,
-            "height_cm":       float(r.height_cm) if r.height_cm else None,
-            "notes":           r.notes,
-            "encoder":         r.encoder.name if r.encoder else None,
-            "created_at":      r.created_at
+            "record_id":        r.record_id,
+            "visit_date":       str(r.visit_date),
+            "chief_complaint":  r.chief_complaint,
+            "symptoms":         r.symptoms,
+            "diagnosis":        r.diagnosis,
+            "treatment":        r.treatment,
+            "blood_pressure":   r.blood_pressure,
+            "temperature":      float(r.temperature)     if r.temperature     else None,
+            "weight_kg":        float(r.weight_kg)       if r.weight_kg       else None,
+            "height_cm":        float(r.height_cm)       if r.height_cm       else None,
+            "heart_rate":       r.heart_rate,
+            "respiratory_rate": r.respiratory_rate,
+            "lmp":              str(r.lmp)               if r.lmp             else None,
+            "notes":            r.notes,
+            "encoder":          r.encoder.name           if r.encoder         else "—",
+            "created_at":       str(r.created_at)
         }
         for r in records
     ]
@@ -140,412 +130,415 @@ immun_router = APIRouter(prefix="/api/immunizations", tags=["Immunizations"])
 @immun_router.post("/")
 async def create_immunization(
     request: Request,
-    immun_data: ImmunizationCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Mag-record ng bagong immunization para sa pasyente."""
-    ip_address, _ = get_client_info(request)
+    body = await request.json()
+    patient_id = body.get("patient_id")
 
-    patient = db.query(Patient).filter(Patient.patient_id == immun_data.patient_id).first()
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found.")
 
-    if current_user.role == "bhw" and patient.barangay_id != current_user.barangay_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    new_immun = Immunization(
-        patient_id      = immun_data.patient_id,
-        vaccine_name    = immun_data.vaccine_name,
-        date_given      = immun_data.date_given,
-        dose_number     = immun_data.dose_number,
-        administered_by = immun_data.administered_by,
-        batch_number    = immun_data.batch_number,
-        next_schedule   = immun_data.next_schedule,
-        remarks         = immun_data.remarks,
+    immun = Immunization(
+        patient_id      = patient_id,
+        vaccine_name    = body.get("vaccine_name"),
+        date_given      = body.get("date_given"),
+        dose_number     = body.get("dose_number", 1),
+        administered_by = body.get("administered_by"),
+        batch_number    = body.get("batch_number"),
+        next_schedule   = body.get("next_schedule"),
+        remarks         = body.get("remarks"),
         user_id         = current_user.user_id
     )
-    db.add(new_immun)
+    db.add(immun)
     db.commit()
-    db.refresh(new_immun)
-
-    log_audit(db, current_user.user_id, f"ADDED IMMUNIZATION for Patient ID: {immun_data.patient_id}",
-              "immunization", new_immun.immunization_id, ip_address)
-
-    return {"message": "Immunization record added.", "immunization_id": new_immun.immunization_id}
+    db.refresh(immun)
+    return {"message": "Immunization saved.", "immunization_id": immun.immunization_id}
 
 
 @immun_router.get("/patient/{patient_id}")
 async def get_patient_immunizations(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Kunin ang lahat ng immunization records ng isang pasyente."""
-    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found.")
-
-    if current_user.role == "bhw" and patient.barangay_id != current_user.barangay_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    immunizations = db.query(Immunization).filter(
+    """Kunin ang lahat ng immunization records ng pasyente."""
+    records = db.query(Immunization).filter(
         Immunization.patient_id == patient_id
     ).order_by(Immunization.date_given.desc()).all()
 
     return [
         {
-            "immunization_id": i.immunization_id,
-            "vaccine_name":    i.vaccine_name,
-            "date_given":      i.date_given,
-            "dose_number":     i.dose_number,
-            "administered_by": i.administered_by,
-            "batch_number":    i.batch_number,
-            "next_schedule":   i.next_schedule,
-            "remarks":         i.remarks
+            "immunization_id": r.immunization_id,
+            "vaccine_name":    r.vaccine_name,
+            "date_given":      str(r.date_given),
+            "dose_number":     r.dose_number,
+            "administered_by": r.administered_by,
+            "batch_number":    r.batch_number,
+            "next_schedule":   str(r.next_schedule) if r.next_schedule else None,
+            "remarks":         r.remarks,
+            "encoder":         r.encoder.name       if r.encoder       else "—"
         }
-        for i in immunizations
+        for r in records
     ]
 
 
-# Disease Cases Router
-cases_router = APIRouter(prefix="/api/disease-cases", tags=["Disease Cases"])
+# Health Problems Router
+hp_router = APIRouter(prefix="/api/health-problems", tags=["Health Problems"])
 
-@cases_router.post("/")
-async def create_disease_case(
-    request: Request,
-    case_data: DiseaseCaseCreate,
+@hp_router.get("/{patient_id}")
+async def get_health_problems(
+    patient_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Mag-record ng bagong disease case."""
-    ip_address, _ = get_client_info(request)
+    """Kunin ang health problems ng pasyente."""
+    hp = db.query(HealthProblem).filter(HealthProblem.patient_id == patient_id).first()
+    if not hp:
+        return {"patient_id": patient_id, "allergies": None,
+                "has_asthma": False, "chronic_diseases": None, "other_concerns": None}
+    return {
+        "problem_id":       hp.problem_id,
+        "patient_id":       hp.patient_id,
+        "allergies":        hp.allergies,
+        "has_asthma":       bool(hp.has_asthma),
+        "chronic_diseases": hp.chronic_diseases,
+        "other_concerns":   hp.other_concerns,
+        "updated_at":       str(hp.updated_at) if hp.updated_at else None
+    }
 
-    if current_user.role == "bhw" and case_data.barangay_id != current_user.barangay_id:
-        raise HTTPException(status_code=403, detail="Access denied.")
 
-    new_case = DiseaseCase(
-        disease_id      = case_data.disease_id,
-        barangay_id     = case_data.barangay_id,
-        patient_id      = case_data.patient_id,
-        date_recorded   = case_data.date_recorded,
-        number_of_cases = case_data.number_of_cases,
-        age_group       = case_data.age_group,
-        sex             = case_data.sex,
-        remarks         = case_data.remarks,
-        user_id         = current_user.user_id
-    )
-    db.add(new_case)
+@hp_router.post("/{patient_id}")
+async def upsert_health_problems(
+    patient_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """I-save ang health problems (upsert — create or update)."""
+    body = await request.json()
+    hp = db.query(HealthProblem).filter(HealthProblem.patient_id == patient_id).first()
+    if hp:
+        hp.allergies        = body.get("allergies")
+        hp.has_asthma       = body.get("has_asthma", False)
+        hp.chronic_diseases = body.get("chronic_diseases")
+        hp.other_concerns   = body.get("other_concerns")
+    else:
+        hp = HealthProblem(
+            patient_id       = patient_id,
+            allergies        = body.get("allergies"),
+            has_asthma       = body.get("has_asthma", False),
+            chronic_diseases = body.get("chronic_diseases"),
+            other_concerns   = body.get("other_concerns")
+        )
+        db.add(hp)
     db.commit()
-    db.refresh(new_case)
-
-    log_audit(db, current_user.user_id, f"ADDED DISEASE CASE: Disease ID {case_data.disease_id}",
-              "disease_cases", new_case.case_id, ip_address)
-
-    return {"message": "Disease case recorded.", "case_id": new_case.case_id}
+    return {"message": "Health problems saved."}
 
 
-@cases_router.get("/diseases")
-async def get_all_diseases(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+# Pregnancy Router
+preg_router = APIRouter(prefix="/api/pregnancy", tags=["Pregnancy"])
+
+@preg_router.get("/{patient_id}")
+async def get_pregnancy(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Kunin ang pregnancy records ng pasyente (female only)."""
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    if patient.sex != "Female":
+        raise HTTPException(status_code=400, detail="Pregnancy records are for female patients only.")
+
+    records = db.query(Pregnancy).filter(
+        Pregnancy.patient_id == patient_id
+    ).order_by(Pregnancy.created_at.desc()).all()
+
+    return [
+        {
+            "pregnancy_id":       r.pregnancy_id,
+            "status":             r.status,
+            "gravida":            r.gravida,
+            "para":               r.para,
+            "lmp":                str(r.lmp)                if r.lmp                else None,
+            "expected_due_date":  str(r.expected_due_date)  if r.expected_due_date  else None,
+            "delivery_date":      str(r.delivery_date)      if r.delivery_date      else None,
+            "delivery_type":      r.delivery_type,
+            "birth_outcome":      r.birth_outcome,
+            "prenatal_visits":    r.prenatal_visits,
+            "last_prenatal_date": str(r.last_prenatal_date) if r.last_prenatal_date else None,
+            "attending_physician":r.attending_physician,
+            "remarks":            r.remarks,
+            "encoder":            r.encoder.name            if r.encoder            else "—",
+            "created_at":         str(r.created_at)
+        }
+        for r in records
+    ]
+
+
+@preg_router.post("/{patient_id}")
+async def save_pregnancy(
+    patient_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mag-save ng pregnancy record (create new entry)."""
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    if patient.sex != "Female":
+        raise HTTPException(status_code=400, detail="Female patients only.")
+
+    body = await request.json()
+    preg = Pregnancy(
+        patient_id          = patient_id,
+        status              = body.get("status", "Pregnant"),
+        gravida             = body.get("gravida"),
+        para                = body.get("para"),
+        lmp                 = body.get("lmp")                or None,
+        expected_due_date   = body.get("expected_due_date")  or None,
+        delivery_date       = body.get("delivery_date")      or None,
+        delivery_type       = body.get("delivery_type")      or None,
+        birth_outcome       = body.get("birth_outcome"),
+        prenatal_visits     = body.get("prenatal_visits", 0),
+        last_prenatal_date  = body.get("last_prenatal_date") or None,
+        attending_physician = body.get("attending_physician"),
+        remarks             = body.get("remarks"),
+        user_id             = current_user.user_id
+    )
+    db.add(preg)
+    db.commit()
+    db.refresh(preg)
+    return {"message": "Pregnancy record saved.", "pregnancy_id": preg.pregnancy_id}
+
+
+@preg_router.put("/{pregnancy_id}")
+async def update_pregnancy(
+    pregnancy_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """I-update ang isang pregnancy record."""
+    preg = db.query(Pregnancy).filter(Pregnancy.pregnancy_id == pregnancy_id).first()
+    if not preg:
+        raise HTTPException(status_code=404, detail="Pregnancy record not found.")
+    body = await request.json()
+    for field in ["status","gravida","para","birth_outcome","prenatal_visits","attending_physician","remarks"]:
+        if field in body:
+            setattr(preg, field, body[field])
+    for date_field in ["lmp","expected_due_date","delivery_date","last_prenatal_date"]:
+        if date_field in body:
+            setattr(preg, date_field, body[date_field] or None)
+    if "delivery_type" in body:
+        preg.delivery_type = body["delivery_type"] or None
+    db.commit()
+    return {"message": "Pregnancy record updated."}
+
+
+# Disease + Cases Router
+disease_router = APIRouter(prefix="/api/diseases", tags=["Diseases"])
+
+@disease_router.get("/")
+async def get_diseases(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Kunin ang master list ng lahat ng sakit."""
     diseases = db.query(Disease).order_by(Disease.disease_name).all()
-    return [{"disease_id": d.disease_id, "disease_name": d.disease_name, 
+    return [{"disease_id": d.disease_id, "disease_name": d.disease_name,
              "icd_code": d.icd_code, "category": d.category} for d in diseases]
 
 
-@cases_router.get("/barangays")
-async def get_all_barangays(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """Kunin ang listahan ng lahat ng barangay."""
-    barangays = db.query(Barangay).order_by(Barangay.barangay_name).all()
-    return [{"barangay_id": b.barangay_id, "barangay_name": b.barangay_name} for b in barangays]
-
-
 # Audit Log Router
-# Admin: nakikita lahat ng logs
-# BHW: nakikita lang ang logs ng kanilang barangay
 audit_router = APIRouter(prefix="/api/audit-logs", tags=["Audit Logs"])
 
 @audit_router.get("/")
 async def get_audit_logs(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    skip: int = 0,
-    limit: int = 100
+    current_user: User = Depends(require_admin),
+    skip: int = 0, limit: int = 100
 ):
-    """
-    Kunin ang audit log.
-    Admin: lahat ng LOGIN at LOGOUT events sa lahat ng barangay.
-    BHW: LOGIN at LOGOUT events ng users sa kanilang barangay lamang.
-    Limitado sa LOGIN at LOGOUT events para sa malinis na audit trail.
-    """
-    from models.models import AuditLog
-
-    # Base query — tanging LOGIN at LOGOUT lang ang ipinakita
-    query = db.query(AuditLog).filter(
+    """Kunin ang audit log — LOGIN at LOGOUT events lamang (Admin only)."""
+    logs = db.query(AuditLog).filter(
         AuditLog.action.in_(["LOGIN - ADMIN", "LOGIN - BHW", "LOGOUT"])
-    )
-
-    if current_user.role == "admin":
-        # Admin: makikita ang lahat ng logs
-        pass
-    else:
-        # BHW: makikita lang ang logs ng users sa kanilang barangay
-        if current_user.barangay_id:
-            # Kunin ang lahat ng user_ids na nasa parehong barangay
-            barangay_user_ids = [
-                u.user_id for u in
-                db.query(User).filter(User.barangay_id == current_user.barangay_id).all()
-            ]
-            query = query.filter(AuditLog.user_id.in_(barangay_user_ids))
-        else:
-            # Walang barangay assignment — walang makikitang logs
-            return []
-
-    logs = query.order_by(AuditLog.date_time.desc()).offset(skip).limit(limit).all()
+    ).order_by(AuditLog.date_time.desc()).offset(skip).limit(limit).all()
 
     return [
         {
-            "log_id":        l.log_id,
-            "user_name":     l.user.name          if l.user else "Unknown",
-            "user_role":     l.user.role          if l.user else "—",
-            "barangay_name": l.user.barangay.barangay_name
-                             if l.user and l.user.barangay else "—",
-            "action":        l.action,
-            "ip_address":    l.ip_address,
-            "date_time":     l.date_time
+            "log_id":     l.log_id,
+            "user_name":  l.user.name if l.user else "Unknown",
+            "user_role":  l.user.role if l.user else "—",
+            "action":     l.action,
+            "ip_address": l.ip_address,
+            "date_time":  str(l.date_time)
         }
         for l in logs
     ]
 
-@audit_router.get("/summary")
-async def get_audit_summary(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
+
+# ── Auto disease case counting ────────────────────────────────────────────
+DISEASE_PATTERNS = [
+    (r'(flu|influenza|gripe)',                                  'Influenza'),
+    (r'(dengue|dhf|dengue hemorrhagic)',                        'Dengue Fever'),
+    (r'(tuberculosis|\btb\b|pulmonary tb)',                     'Tuberculosis'),
+    (r'(covid-?19|coronavirus|sars-cov)',                       'COVID-19'),
+    (r'(hypertension|htn|high blood pressure)',                 'Hypertension'),
+    (r'(diabetes mellitus|diabetic|\bdm\b|dm type)',            'Diabetes Mellitus'),
+    (r'(pneumonia|pneumonitis)',                                 'Pneumonia'),
+    (r'(diarrhea|diarrhoea|gastroenteritis|lbm)',               'Diarrhea'),
+    (r'(leptospirosis)',                                         'Leptospirosis'),
+    (r'(typhoid fever|typhoid|enteric fever)',                   'Typhoid Fever'),
+    (r'(acute respiratory infection|ari|urti|nasopharyngitis)', 'Acute Respiratory Infection'),
+    (r'(chickenpox|varicella)',                                  'Chickenpox'),
+    (r'(measles|tigdas|rubeola)',                               'Measles'),
+    (r'(\basthma\b|bronchial asthma)',                          'Asthma'),
+    (r'(malnutrition|malnourished)',                            'Malnutrition'),
+]
+
+def _auto_count_cases(db: Session, diagnosis: str, patient_id: int, date_recorded: str, user_id: int):
     """
-    Summary ng login/logout activity.
-    Kapaki-pakinabang para sa admin dashboard monitoring.
+    I-auto count ang disease cases mula sa diagnosis field.
+    Ginagamit ang regex patterns para i-normalize ang mga variant
+    ng parehong sakit (e.g. "mild flu", "severe flu" → Influenza).
+    Health problems (allergies, asthma) ay HINDI kasama dito.
     """
-    from models.models import AuditLog
-    from sqlalchemy import func
+    import re
+    text = diagnosis.lower()
+    detected = set()
+    for pattern, disease_name in DISEASE_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            detected.add(disease_name)
 
-    query = db.query(AuditLog).filter(
-        AuditLog.action.in_(["LOGIN - ADMIN", "LOGIN - BHW", "LOGOUT"])
-    )
-
-    if current_user.role != "admin" and current_user.barangay_id:
-        barangay_user_ids = [
-            u.user_id for u in
-            db.query(User).filter(User.barangay_id == current_user.barangay_id).all()
-        ]
-        query = query.filter(AuditLog.user_id.in_(barangay_user_ids))
-
-    total_logins  = query.filter(AuditLog.action.like("LOGIN%")).count()
-    total_logouts = query.filter(AuditLog.action == "LOGOUT").count()
-
-    return {
-        "total_logins":  total_logins,
-        "total_logouts": total_logouts
-    }
+    for dname in detected:
+        disease = db.query(Disease).filter(Disease.disease_name == dname).first()
+        if not disease:
+            continue
+        case = DiseaseCase(
+            disease_id      = disease.disease_id,
+            patient_id      = patient_id,
+            date_recorded   = date_recorded,
+            number_of_cases = 1,
+            remarks         = f"Auto-recorded from diagnosis: {diagnosis[:100]}",
+            user_id         = user_id
+        )
+        db.add(case)
+    if detected:
+        db.commit()
 
 
-# ============================================================
-# APPLICATION LIFESPAN (Startup & Shutdown events)
-# ============================================================
+# ── Application lifespan ──────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Mga gagawin bago mag-start at pagkatapos mag-stop ang application.
-    Sinusuri ang database connection sa startup.
-    """
-    # --- Startup ---
-    print("🚀 Starting EMR System...")
-    print("🔐 Security modules loaded.")
-
-    # Subukan ang database connection
-    if not test_connection():
-        print("⚠️ Warning: Database connection failed! Check your .env configuration.")
-
-    print("✅ EMR System is ready!")
-    yield  # Dito nagtatakbo ang application
-
-    # --- Shutdown ---
-    print("🛑 Shutting down EMR System...")
+    print(f"🚀 EMR System starting — {get_barangay_name()}")
+    test_connection()
+    print("✅ Ready.")
+    yield
+    print("🛑 Shutting down.")
 
 
-# ============================================================
-# FASTAPI APP INITIALIZATION
-# ============================================================
+# ── App init ──────────────────────────────────────────────────────────────
 app = FastAPI(
-    title        = "District 1 Health EMR System",
-    description  = "Electronic Medical Records System with Disease Trend Analytics",
-    version      = "1.0.0",
-    lifespan     = lifespan,
-    # I-hide ang docs sa production para sa security
-    docs_url     = "/api/docs" if os.getenv("DEBUG", "False").lower() == "true" else None,
-    redoc_url    = None
+    title       = f"EMR System — {get_barangay_name()}",
+    description = "Barangay-level Electronic Medical Records",
+    version     = "2.0.0",
+    lifespan    = lifespan,
+    docs_url    = "/api/docs" if os.getenv("DEBUG", "False").lower() == "true" else None,
+    redoc_url   = None
 )
 
-# ============================================================
-# MIDDLEWARE CONFIGURATION
-# ============================================================
-
-# 1. RATE LIMITING - Para maiwasan ang brute-force at DDoS attacks
+# Rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# 2. CORS MIDDLEWARE - Kontrolin kung sino ang pwedeng mag-access ng API
+# CORS
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins     = allowed_origins,
     allow_credentials = True,
-    allow_methods     = ["GET", "POST", "PUT", "DELETE"],  # I-limit ang allowed methods
-    allow_headers     = ["Authorization", "Content-Type"],
-    max_age           = 600  # Cache ang preflight requests ng 10 minuto
+    allow_methods     = ["GET","POST","PUT","DELETE"],
+    allow_headers     = ["Authorization","Content-Type"],
+    max_age           = 600
 )
 
-# 3. TRUSTED HOST MIDDLEWARE - Para maiwasan ang host header attacks
-if os.getenv("DEBUG", "False").lower() != "true":
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts = ["localhost", "127.0.0.1", "*.district1health.gov.ph"]
-    )
-
-
-# 4. SECURITY HEADERS MIDDLEWARE - Dagdag na security headers sa bawat response
+# Security headers middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """
-    Magdagdag ng security headers sa bawat response.
-    Nagpoprotekta laban sa XSS, clickjacking, at iba pang attacks.
-    """
     response = await call_next(request)
-
-    # Prevent clickjacking
-    response.headers["X-Frame-Options"] = "DENY"
-    # Prevent MIME type sniffing
+    response.headers["X-Frame-Options"]        = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    # Enable XSS protection sa browser
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    # Strict transport security (HTTPS only)
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Content security policy
-    # Kasama na ang jsdelivr at cdnjs para sa Chart.js at ibang CDN libraries
+    response.headers["X-XSS-Protection"]       = "1; mode=block"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
             "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' "
-            "https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: blob:; "
-        "connect-src 'self'; "
-        "worker-src 'self' blob:;"
+        "connect-src 'self'; worker-src 'self' blob:;"
     )
-    # Remove server information para hindi malaman ng attacker ang tech stack
-    response.headers["Server"] = "District1-EMR"
-
+    response.headers["Server"] = "EMR-System"
     return response
 
-
-# 5. REQUEST LOGGING MIDDLEWARE - Para sa debugging at monitoring
+# Request logging
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """
-    I-log ang bawat HTTP request para sa monitoring.
-    Ginagawa rin ito para ma-detect ang suspicious na activity.
-    """
-    start_time = time.time()
+    start = time.time()
     response = await call_next(request)
-    process_time = time.time() - start_time
-
-    # I-log ang mabagal na requests (possible na attack o performance issue)
-    if process_time > 5:  # 5 seconds threshold
-        print(f"⚠️ Slow request: {request.method} {request.url.path} took {process_time:.2f}s")
-
+    elapsed = time.time() - start
+    if elapsed > 5:
+        print(f"⚠️ Slow: {request.method} {request.url.path} — {elapsed:.2f}s")
     return response
 
-
-# ============================================================
-# INCLUDE ROUTERS
-# ============================================================
+# Register routers
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(patients_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
-app.include_router(medical_router)
+app.include_router(mr_router)
 app.include_router(immun_router)
-app.include_router(cases_router)
+app.include_router(hp_router)
+app.include_router(preg_router)
+app.include_router(disease_router)
 app.include_router(audit_router)
 
+# Static files
+BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 
-# ============================================================
-# STATIC FILES AT FRONTEND SERVING
-# I-serve ang HTML/CSS/JS files para sa frontend
-# I-mount ang bawat subfolder ng frontend para ma-access
-# ============================================================
-import os
+for folder in ["css", "js", "pages", "assets"]:
+    path = os.path.join(FRONTEND_DIR, folder)
+    if os.path.exists(path):
+        app.mount(f"/frontend/{folder}", StaticFiles(directory=path), name=folder)
 
-# I-compute ang absolute path ng frontend folder
-BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR  = os.path.join(BASE_DIR, "..", "frontend")
-FRONTEND_DIR  = os.path.abspath(FRONTEND_DIR)
-
-# I-mount ang CSS, JS, at Pages folders bilang static files
-if os.path.exists(os.path.join(FRONTEND_DIR, "css")):
-    app.mount("/frontend/css",   StaticFiles(directory=os.path.join(FRONTEND_DIR, "css")),   name="css")
-
-if os.path.exists(os.path.join(FRONTEND_DIR, "js")):
-    app.mount("/frontend/js",    StaticFiles(directory=os.path.join(FRONTEND_DIR, "js")),    name="js")
-
-if os.path.exists(os.path.join(FRONTEND_DIR, "pages")):
-    app.mount("/frontend/pages", StaticFiles(directory=os.path.join(FRONTEND_DIR, "pages")), name="pages")
-
-if os.path.exists(os.path.join(FRONTEND_DIR, "assets")):
-    app.mount("/frontend/assets",StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")),name="assets")
-
-
-# ============================================================
-# ROOT ENDPOINT - I-serve ang login page
-# ============================================================
 @app.get("/", include_in_schema=False)
-async def serve_frontend():
-    """I-serve ang login page bilang default na page."""
-    login_page = os.path.join(FRONTEND_DIR, "pages", "login.html")
-    if os.path.exists(login_page):
-        return FileResponse(login_page)
-    return {"message": "District 1 Health EMR System API", "status": "running"}
-
+async def root():
+    p = os.path.join(FRONTEND_DIR, "pages", "login.html")
+    return FileResponse(p) if os.path.exists(p) else {"status": "running"}
 
 @app.get("/dashboard", include_in_schema=False)
-async def serve_dashboard():
-    """I-serve ang dashboard page."""
-    dashboard_page = os.path.join(FRONTEND_DIR, "pages", "dashboard.html")
-    if os.path.exists(dashboard_page):
-        return FileResponse(dashboard_page)
-    return {"message": "Dashboard not found."}
+async def dashboard():
+    p = os.path.join(FRONTEND_DIR, "pages", "dashboard.html")
+    return FileResponse(p) if os.path.exists(p) else {"status": "no dashboard"}
 
-
-# Health check endpoint
 @app.get("/api/health", tags=["System"])
 @limiter.limit("30/minute")
-async def health_check(request: Request):
-    """Suriin kung gumagana ang API server."""
-    return {"status": "ok", "system": "District 1 Health EMR", "version": "1.0.0"}
+async def health(request: Request):
+    return {"status": "ok", "barangay": get_barangay_name()}
 
+@app.get("/api/barangay-info", tags=["System"])
+async def barangay_info(current_user = Depends(get_current_user)):
+    """Kunin ang barangay name ng kasalukuyang instance."""
+    return {"barangay_name": get_barangay_name()}
 
-# ============================================================
-# MAIN ENTRY POINT
-# ============================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host    = os.getenv("APP_HOST", "0.0.0.0"),
-        port    = int(os.getenv("APP_PORT", "8000")),
-        reload  = os.getenv("DEBUG", "False").lower() == "true",
-        workers = 1  # Para sa development; dagdagan sa production
-    )
+    uvicorn.run("main:app",
+                host=os.getenv("APP_HOST", "0.0.0.0"),
+                port=int(os.getenv("APP_PORT", "8000")),
+                reload=os.getenv("DEBUG","False").lower()=="true")
