@@ -12,7 +12,7 @@ from datetime import date
 from database import get_db
 from models.models import Patient, User
 from middleware.auth import get_current_user, require_admin
-
+from websocket_manager import manager
 router = APIRouter(prefix="/api/patients", tags=["Patients"])
 
 
@@ -130,7 +130,20 @@ async def create_patient(
     db.add(p)
     db.commit()
     db.refresh(p)
-    return _fmt(p)
+
+    patient_data = _fmt(p)
+
+    print("📢 Broadcasting patient_created event...")
+    print(f"🔌 Connected clients: {len(manager.active_connections)}")
+
+    await manager.broadcast({
+        "type": "patient_created",
+        "patient": patient_data
+    })
+
+    print("✅ patient_created event broadcasted")
+
+    return patient_data
 
 
 @router.get("/stats")
@@ -189,7 +202,16 @@ async def update_patient(
 
     db.commit()
     db.refresh(p)
-    return _fmt(p)
+
+    patient_data = _fmt(p)
+
+    # Notify all connected users
+    await manager.broadcast({
+        "type": "patient_updated",
+        "patient": patient_data
+    })
+
+    return patient_data
 
 
 @router.delete("/{patient_id}")
@@ -204,4 +226,13 @@ async def archive_patient(
         raise HTTPException(status_code=404, detail="Patient not found.")
     p.is_archived = True
     db.commit()
-    return {"message": f"Patient {p.last_name}, {p.first_name} archived."}
+
+    # Notify all connected users
+    await manager.broadcast({
+        "type": "patient_deleted",
+        "patient_id": patient_id
+    })
+
+    return {
+        "message": f"Patient {p.last_name}, {p.first_name} archived."
+    }
