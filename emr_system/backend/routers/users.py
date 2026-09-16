@@ -22,12 +22,11 @@ async def get_all_users(
     role:   Optional[str] = None,
     status: Optional[str] = None
 ):
-    """Kunin ang listahan ng lahat ng users (Admin only)."""
-    query = db.query(User)
+    """Kunin ang listahan ng lahat ng health staff (Admin only). Hindi kasama ang sariling Admin account."""
+    query = db.query(User).filter(User.user_id != current_user.user_id)
     if role:   query = query.filter(User.role   == role)
     if status: query = query.filter(User.status == status)
     users = query.order_by(User.name).all()
-
     return [_format_user(u) for u in users]
 
 
@@ -40,6 +39,7 @@ async def register_bhw(
     """
     Mag-register ng bagong BHW account (Admin only).
     Walang OTP verification — direktang nire-register ng Admin.
+    Roles: admin, bhw, midwife, doctor
     """
     body = await request.json()
     name     = body.get("name", "").strip()
@@ -62,12 +62,13 @@ async def register_bhw(
         raise HTTPException(status_code=400, detail=msg)
 
     new_user = User(
-        name          = name,
-        email         = email,
-        password_hash = hash_password(password),
-        role          = role if role in ["admin", "bhw"] else "bhw",
-        position      = position or None,
-        status        = "active"
+        name           = name,
+        email          = email,
+        password_hash  = hash_password(password),
+        role           = role if role in ["admin", "bhw", "midwife", "doctor"] else "bhw",
+        position       = position or None,
+        status         = "active",
+        is_first_login = True   # BHW must change password on first login
     )
     db.add(new_user)
     db.commit()
@@ -82,16 +83,22 @@ async def get_user_stats(
     current_user: User = Depends(require_admin)
 ):
     """Summary statistics ng users para sa Admin Dashboard."""
-    total_bhw    = db.query(User).filter(User.role == "bhw").count()
-    active_bhw   = db.query(User).filter(User.role == "bhw", User.status == "active").count()
-    inactive_bhw = db.query(User).filter(User.role == "bhw", User.status == "inactive").count()
+    total_staff  = db.query(User).filter(User.role != "admin").count()
+    active_staff = db.query(User).filter(User.role != "admin", User.status == "active").count()
+    inactive     = db.query(User).filter(User.role != "admin", User.status == "inactive").count()
     locked       = db.query(User).filter(User.status == "locked").count()
+    by_role      = {}
+    for role in ["bhw", "midwife", "doctor"]:
+        by_role[role] = db.query(User).filter(User.role == role).count()
 
     return {
-        "total_bhw":       total_bhw,
-        "active_bhw":      active_bhw,
-        "inactive_bhw":    inactive_bhw,
-        "locked_accounts": locked
+        "total_bhw":       total_staff,   # kept for compatibility
+        "active_bhw":      active_staff,
+        "inactive_bhw":    inactive,
+        "locked_accounts": locked,
+        "total_staff":     total_staff,
+        "active_staff":    active_staff,
+        "by_role":         by_role
     }
 
 
@@ -115,18 +122,40 @@ async def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """I-update ang user information (Admin only)."""
+    """
+    I-update ang health staff account (Admin only).
+    Pwedeng i-update ang: name, email, role, position, status.
+    """
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
 
     body = await request.json()
 
-    if "name"     in body: user.name     = body["name"].strip()
-    if "position" in body: user.position = body["position"]
-    if "status"   in body:
+    if "name" in body and body["name"].strip():
+        user.name = body["name"].strip()
+
+    if "email" in body and body["email"].strip():
+        new_email = body["email"].strip().lower()
+        # Check if email is already taken by another user
+        existing = db.query(User).filter(
+            User.email == new_email,
+            User.user_id != user_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email is already in use by another account.")
+        user.email = new_email
+
+    if "role" in body and body["role"] in ["admin", "bhw", "midwife", "doctor"]:
+        user.role = body["role"]
+
+    if "position" in body:
+        user.position = body["position"].strip() or None
+
+    if "status" in body and body["status"] in ["active", "inactive"]:
         user.status = body["status"]
         if body["status"] == "active":
+            # Reset lockout when reactivating
             user.failed_attempts = 0
             user.locked_until    = None
 
@@ -157,12 +186,13 @@ async def deactivate_user(
 def _format_user(user: User) -> dict:
     """Helper para i-format ang user response."""
     return {
-        "user_id":    user.user_id,
-        "name":       user.name,
-        "email":      user.email,
-        "role":       user.role,
-        "position":   user.position,
-        "status":     user.status,
-        "last_login": str(user.last_login) if user.last_login else None,
-        "created_at": str(user.created_at)
+        "user_id":        user.user_id,
+        "name":           user.name,
+        "email":          user.email,
+        "role":           user.role,
+        "position":       user.position,
+        "status":         user.status,
+        "is_first_login": getattr(user, 'is_first_login', True),
+        "last_login":     str(user.last_login) if user.last_login else None,
+        "created_at":     str(user.created_at)
     }

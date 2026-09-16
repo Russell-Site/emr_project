@@ -380,3 +380,32 @@ VALUES ('System Administrator', 'admin@dalandanan.gov.ph',
         '$2b$12$placeholder_run_reset_script', 'admin', 'Health Information Officer', 'active');
 
 SELECT 'Both databases created successfully!' AS status;
+
+-- ============================================================
+-- MIGRATION: Add is_first_login column to users table
+-- Run this in MySQL before restarting the server
+-- ============================================================
+ 
+USE emr_veinte_reales;
+ALTER TABLE users ADD COLUMN is_first_login TINYINT(1) NOT NULL DEFAULT 1 AFTER status;
+-- Mark existing admin as not first-time (already set up)
+UPDATE users SET is_first_login = 0 WHERE role = 'admin';
+ 
+USE emr_dalandanan;
+ALTER TABLE users ADD COLUMN is_first_login TINYINT(1) NOT NULL DEFAULT 1 AFTER status;
+UPDATE users SET is_first_login = 0 WHERE role = 'admin';
+ 
+SELECT 'Migration complete!' AS status;
+
+-- ============================================================
+-- MIGRATION: Update role ENUM to include midwife and doctor
+-- Run this BEFORE restarting the server
+-- ============================================================
+ 
+USE emr_veinte_reales;
+ALTER TABLE users MODIFY COLUMN role ENUM('admin','bhw','midwife','doctor') NOT NULL DEFAULT 'bhw';
+ 
+USE emr_dalandanan;
+ALTER TABLE users MODIFY COLUMN role ENUM('admin','bhw','midwife','doctor') NOT NULL DEFAULT 'bhw';
+ 
+SELECT 'Role enum migration complete!' AS status;

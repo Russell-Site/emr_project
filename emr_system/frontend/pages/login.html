@@ -271,14 +271,15 @@ document.getElementById('loginForm').addEventListener('submit', async function (
         });
         const data = await res.json();
         if (res.ok) {
-            sessionStorage.setItem('access_token',  data.access_token);
+            sessionStorage.setItem('access_token',   data.access_token);
             sessionStorage.setItem('user_id',        String(data.user_id));
             sessionStorage.setItem('user_name',      data.name);
             sessionStorage.setItem('user_role',      data.role);
             sessionStorage.setItem('user_email',     email);
-            sessionStorage.setItem('barangay_id',    String(data.barangay_id || ''));
             sessionStorage.setItem('barangay_name',  data.barangay_name || '');
             sessionStorage.setItem('token_expires',  String(Date.now() + data.expires_in * 1000));
+            // Store first login flag — dashboard will check this and show forced pw change
+            sessionStorage.setItem('is_first_login', String(data.is_first_login || false));
             window.location.href = '/frontend/pages/dashboard.html';
         } else if (res.status === 423) {
             showAlert(data.detail || 'Account is locked.'); startLockout(15);
@@ -320,8 +321,9 @@ async function unlockSession() {
         });
         if (res.ok) {
             const data = await res.json();
-            sessionStorage.setItem('access_token', data.access_token);
-            sessionStorage.setItem('token_expires', String(Date.now() + data.expires_in * 1000));
+            sessionStorage.setItem('access_token',   data.access_token);
+            sessionStorage.setItem('token_expires',  String(Date.now() + data.expires_in * 1000));
+            sessionStorage.setItem('is_first_login', String(data.is_first_login || false));
             document.getElementById('sessionLock').classList.remove('show');
             document.getElementById('unlockError').style.display = 'none';
             resetSessionTimer();
