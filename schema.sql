@@ -179,9 +179,70 @@ CREATE TABLE IF NOT EXISTS audit_log (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+
+-- ============================================================
+-- INVENTORY MODULE
+-- ============================================================
+
+-- INVENTORY ITEMS TABLE
+-- Stores medicines, vaccines, and medical supplies
+CREATE TABLE IF NOT EXISTS inventory_items (
+    item_id          INT AUTO_INCREMENT PRIMARY KEY,
+    item_name        VARCHAR(150) NOT NULL,
+    category         ENUM('Medicine', 'Vaccine', 'Medical Supply') NOT NULL,
+    description      TEXT NULL,
+    unit             VARCHAR(50) NOT NULL,
+    reorder_level    INT NOT NULL DEFAULT 10,
+    is_active        TINYINT(1) NOT NULL DEFAULT 1,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- CURRENT STOCK TABLE
+CREATE TABLE IF NOT EXISTS inventory_stock (
+    stock_id         INT AUTO_INCREMENT PRIMARY KEY,
+    item_id          INT NOT NULL,
+    quantity         INT NOT NULL DEFAULT 0,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES inventory_items(item_id)
+        ON DELETE CASCADE,
+    UNIQUE KEY uq_inventory_stock_item (item_id)
+) ENGINE=InnoDB;
+
+-- INVENTORY TRANSACTIONS TABLE
+-- Keeps the history of stock-in, stock-out, and adjustments
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+    transaction_id   INT AUTO_INCREMENT PRIMARY KEY,
+    item_id          INT NOT NULL,
+    transaction_type ENUM('Stock In', 'Stock Out', 'Adjustment') NOT NULL,
+    quantity         INT NOT NULL,
+    previous_stock   INT NOT NULL,
+    new_stock        INT NOT NULL,
+    remarks          TEXT NULL,
+    user_id          INT NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES inventory_items(item_id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_inventory_item_name
+    ON inventory_items (item_name);
+
+CREATE INDEX idx_inventory_category
+    ON inventory_items (category);
+
+CREATE INDEX idx_inventory_transaction_item
+    ON inventory_transactions (item_id);
+
+CREATE INDEX idx_inventory_transaction_date
+    ON inventory_transactions (created_at);
 -- ============================================================
 -- SEED DATA FOR VEINTE REALES
 -- ============================================================
+
+
+
 INSERT INTO disease (disease_name, icd_code, category, is_notifiable) VALUES
 ('Influenza',                   'J11',   'Communicable',     0),
 ('Dengue Fever',                'A90',   'Communicable',     1),
@@ -357,7 +418,63 @@ CREATE TABLE IF NOT EXISTS audit_log (
     date_time   DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
+-- ============================================================
+-- INVENTORY MODULE
+-- ============================================================
 
+-- INVENTORY ITEMS TABLE
+CREATE TABLE IF NOT EXISTS inventory_items (
+    item_id          INT AUTO_INCREMENT PRIMARY KEY,
+    item_name        VARCHAR(150) NOT NULL,
+    category         ENUM('Medicine', 'Vaccine', 'Medical Supply') NOT NULL,
+    description      TEXT NULL,
+    unit              VARCHAR(50) NOT NULL,
+    reorder_level    INT NOT NULL DEFAULT 10,
+    is_active         TINYINT(1) NOT NULL DEFAULT 1,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- CURRENT STOCK TABLE
+CREATE TABLE IF NOT EXISTS inventory_stock (
+    stock_id         INT AUTO_INCREMENT PRIMARY KEY,
+    item_id          INT NOT NULL,
+    quantity         INT NOT NULL DEFAULT 0,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES inventory_items(item_id)
+        ON DELETE CASCADE,
+    UNIQUE KEY uq_inventory_stock_item (item_id)
+) ENGINE=InnoDB;
+
+-- INVENTORY TRANSACTIONS TABLE
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+    transaction_id   INT AUTO_INCREMENT PRIMARY KEY,
+    item_id          INT NOT NULL,
+    transaction_type ENUM('Stock In', 'Stock Out', 'Adjustment') NOT NULL,
+    quantity         INT NOT NULL,
+    previous_stock   INT NOT NULL,
+    new_stock        INT NOT NULL,
+    remarks          TEXT NULL,
+    user_id          INT NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES inventory_items(item_id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_inventory_item_name
+    ON inventory_items (item_name);
+
+CREATE INDEX idx_inventory_category
+    ON inventory_items (category);
+
+CREATE INDEX idx_inventory_transaction_item
+    ON inventory_transactions (item_id);
+
+CREATE INDEX idx_inventory_transaction_date
+    ON inventory_transactions (created_at);
+
+    
 INSERT INTO disease (disease_name, icd_code, category, is_notifiable) VALUES
 ('Influenza',                   'J11',   'Communicable',     0),
 ('Dengue Fever',                'A90',   'Communicable',     1),

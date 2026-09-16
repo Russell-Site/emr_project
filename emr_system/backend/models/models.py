@@ -224,3 +224,150 @@ class AuditLog(Base):
     date_time  = Column(DateTime, server_default=func.now())
 
     user = relationship("User", back_populates="audit_logs")
+
+# ============================================================
+# INVENTORY MODULE
+# ============================================================
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+
+    item_id = Column(Integer, primary_key=True, autoincrement=True)
+    item_name = Column(String(150), nullable=False)
+    category = Column(
+        Enum("Medicine", "Vaccine", "Medical Supply"),
+        nullable=False
+    )
+    description = Column(Text, nullable=True)
+    unit = Column(String(50), nullable=False)
+    reorder_level = Column(Integer, nullable=False, default=10)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    stock = relationship(
+        "InventoryStock",
+        back_populates="item",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    transactions = relationship(
+        "InventoryTransaction",
+        back_populates="item",
+        cascade="all, delete-orphan"
+    )
+
+
+class InventoryStock(Base):
+    __tablename__ = "inventory_stock"
+
+    stock_id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True
+    )
+
+    item_id = Column(
+        Integer,
+        ForeignKey(
+            "inventory_items.item_id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        unique=True
+    )
+
+    quantity = Column(
+        Integer,
+        nullable=False,
+        default=0
+    )
+
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    item = relationship(
+        "InventoryItem",
+        back_populates="stock"
+    )
+
+
+class InventoryTransaction(Base):
+    __tablename__ = "inventory_transactions"
+
+    transaction_id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True
+    )
+
+    item_id = Column(
+        Integer,
+        ForeignKey(
+            "inventory_items.item_id",
+            ondelete="CASCADE"
+        ),
+        nullable=False
+    )
+
+    transaction_type = Column(
+        Enum(
+            "Stock In",
+            "Stock Out",
+            "Adjustment"
+        ),
+        nullable=False
+    )
+
+    quantity = Column(
+        Integer,
+        nullable=False
+    )
+
+    previous_stock = Column(
+        Integer,
+        nullable=False
+    )
+
+    new_stock = Column(
+        Integer,
+        nullable=False
+    )
+
+    remarks = Column(
+        Text,
+        nullable=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.user_id"),
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    item = relationship(
+        "InventoryItem",
+        back_populates="transactions"
+    )
+
+    user = relationship(
+        "User"
+    )

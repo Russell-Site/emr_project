@@ -34,6 +34,7 @@ from routers.patients  import router as patients_router
 from routers.analytics import router as analytics_router
 from routers.reports   import router as reports_router
 from routers.websocket import router as websocket_router
+from routers.inventory import router as inventory_router
 # ── Rate limiter ──────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
@@ -501,6 +502,7 @@ app.include_router(patients_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
 app.include_router(websocket_router)
+app.include_router(inventory_router)
 app.include_router(mr_router)
 app.include_router(immun_router)
 app.include_router(hp_router)
