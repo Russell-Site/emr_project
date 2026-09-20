@@ -34,7 +34,6 @@ from routers.users     import router as users_router
 from routers.patients  import router as patients_router
 from routers.analytics import router as analytics_router
 from routers.reports   import router as reports_router
-
 # ── Rate limiter ──────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
