@@ -26,15 +26,14 @@ from models.models import (
     MedicalRecord, Immunization, Disease, DiseaseCase, AuditLog
 )
 from middleware.auth import (
-    get_current_user, require_admin, log_audit, get_client_info
+    get_current_user, require_admin, log_audit, get_client_info,
+    require_permission, get_permission
 )
 from routers.auth      import router as auth_router
 from routers.users     import router as users_router
 from routers.patients  import router as patients_router
 from routers.analytics import router as analytics_router
 from routers.reports   import router as reports_router
-from routers.websocket import router as websocket_router
-from routers.inventory import router as inventory_router
 # ── Rate limiter ──────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
@@ -49,7 +48,7 @@ mr_router = APIRouter(prefix="/api/medical-records", tags=["Medical Records"])
 async def create_medical_record(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('medical_records', 'edit'))
 ):
     """Mag-encode ng bagong medical record. Nag-ti-trigger ng auto disease case counting."""
     body = await request.json()
@@ -95,7 +94,7 @@ async def create_medical_record(
 async def get_patient_records(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('medical_records', 'view'))
 ):
     """Kunin ang lahat ng medical records ng isang pasyente."""
     records = db.query(MedicalRecord).filter(
@@ -132,7 +131,7 @@ immun_router = APIRouter(prefix="/api/immunizations", tags=["Immunizations"])
 async def create_immunization(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('immunization', 'edit'))
 ):
     """Mag-record ng bagong immunization para sa pasyente."""
     body = await request.json()
@@ -163,7 +162,7 @@ async def create_immunization(
 async def get_patient_immunizations(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('immunization', 'view'))
 ):
     """Kunin ang lahat ng immunization records ng pasyente."""
     records = db.query(Immunization).filter(
@@ -193,7 +192,7 @@ hp_router = APIRouter(prefix="/api/health-problems", tags=["Health Problems"])
 async def get_health_problems(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('health_problems', 'view'))
 ):
     """Kunin ang health problems ng pasyente."""
     hp = db.query(HealthProblem).filter(HealthProblem.patient_id == patient_id).first()
@@ -216,7 +215,7 @@ async def upsert_health_problems(
     patient_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('health_problems', 'edit'))
 ):
     """I-save ang health problems (upsert — create or update)."""
     body = await request.json()
@@ -246,7 +245,7 @@ preg_router = APIRouter(prefix="/api/pregnancy", tags=["Pregnancy"])
 async def get_pregnancy(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('pregnancy', 'view'))
 ):
     """Kunin ang pregnancy records ng pasyente (female only)."""
     patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
@@ -286,7 +285,7 @@ async def save_pregnancy(
     patient_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('pregnancy', 'edit'))
 ):
     """Mag-save ng pregnancy record (create new entry)."""
     patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
@@ -323,7 +322,7 @@ async def update_pregnancy(
     pregnancy_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('pregnancy', 'edit'))
 ):
     """I-update ang isang pregnancy record."""
     preg = db.query(Pregnancy).filter(Pregnancy.pregnancy_id == pregnancy_id).first()
@@ -501,8 +500,6 @@ app.include_router(users_router)
 app.include_router(patients_router)
 app.include_router(analytics_router)
 app.include_router(reports_router)
-app.include_router(websocket_router)
-app.include_router(inventory_router)
 app.include_router(mr_router)
 app.include_router(immun_router)
 app.include_router(hp_router)

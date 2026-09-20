@@ -24,9 +24,10 @@ class User(Base):
     name            = Column(String(150), nullable=False)
     email           = Column(String(150), nullable=False, unique=True)
     password_hash   = Column(String(255), nullable=False)
-    role            = Column(Enum("admin", "bhw"), nullable=False, default="bhw")
+    role            = Column(Enum("admin", "bhw", "midwife", "doctor"), nullable=False, default="bhw")
     position        = Column(String(100), nullable=True)
     status          = Column(Enum("active", "inactive", "locked"), nullable=False, default="active")
+    is_first_login  = Column(Boolean, nullable=False, default=True)   # True = must change password on first login
     failed_attempts = Column(Integer, nullable=False, default=0)
     locked_until    = Column(DateTime, nullable=True)
     last_login      = Column(DateTime, nullable=True)

@@ -190,3 +190,68 @@ def get_client_info(request: Request) -> tuple[str, str]:
 
     user_agent = request.headers.get("User-Agent", "Unknown")
     return ip_address, user_agent
+
+
+# ============================================================
+# RBAC — Role-Based Access Control Helpers
+# ============================================================
+
+# Permission matrix per role
+# Format: role -> {resource: "edit" | "view" | "none"}
+PERMISSIONS = {
+    "admin": {
+        "medical_records": "edit",
+        "immunization":    "edit",
+        "pregnancy":       "edit",
+        "health_problems": "edit",
+        "users":           "edit",
+    },
+    "bhw": {
+        "medical_records": "edit",
+        "immunization":    "edit",
+        "pregnancy":       "view",
+        "health_problems": "edit",
+        "users":           "none",
+    },
+    "midwife": {
+        "medical_records": "view",
+        "immunization":    "none",
+        "pregnancy":       "edit",
+        "health_problems": "view",
+        "users":           "none",
+    },
+    "doctor": {
+        "medical_records": "edit",
+        "immunization":    "view",
+        "pregnancy":       "view",
+        "health_problems": "view",
+        "users":           "none",
+    },
+}
+
+
+def get_permission(role: str, resource: str) -> str:
+    """Return permission level: 'edit', 'view', or 'none'."""
+    return PERMISSIONS.get(role, {}).get(resource, "none")
+
+
+def require_permission(resource: str, level: str = "view"):
+    """
+    FastAPI dependency — checks if current user has required permission.
+    level = "view" (can view) or "edit" (can modify)
+    """
+    from fastapi import Depends, HTTPException
+    async def _check(current_user=Depends(get_current_user)):
+        perm = get_permission(current_user.role, resource)
+        if level == "edit" and perm != "edit":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your role ({current_user.role}) does not have edit access to {resource}."
+            )
+        if level == "view" and perm == "none":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your role ({current_user.role}) does not have access to {resource}."
+            )
+        return current_user
+    return _check
